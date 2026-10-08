@@ -742,7 +742,8 @@
         const td = document.createElement('td');
         const status = r.status || { key: 'unknown', detail: null };
         const help = (T.status_help && T.status_help[status.key]) || '';
-        const title = help + (status.detail ? ' (' + (r.output ? r.output.sensor_descr + ': ' : '') + status.detail + ')' : '');
+        // e.g. "The load is powered from the mains; the battery is standing by. (MainsVolt 1: 230 V)"
+        const title = help + (status.detail ? ' (' + status.detail + ')' : '');
         const pill = badge((T.status && T.status[status.key]) || status.key, STATUS_KINDS[status.key] || 'default', title, status.key !== 'on_battery');
         if (status.key === 'on_battery') {
             const dot = document.createElement('span');

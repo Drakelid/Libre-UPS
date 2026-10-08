@@ -138,7 +138,7 @@ return [
         'battery_test' => 'UPS-en tester batteriet.',
         'off' => 'UPS-en leverer ikke strøm til lasten.',
         'unreachable' => 'LibreNMS når ikke denne UPS-en; verdiene er fra siste vellykkede avlesning.',
-        'unknown' => 'UPS-en rapporterer ikke hvor lasten får strøm fra.',
+        'unknown' => 'UPS-en rapporterer verken utgangsstatus, nettstatus eller inngangsspenning, så strømkilden er ukjent. Åpne raden for å se hvilke sensorer LibreNMS har for den.',
     ],
     'battery_state' => [
         'ok' => 'OK',

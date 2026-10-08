@@ -138,7 +138,7 @@ return [
         'battery_test' => 'The UPS is testing its battery.',
         'off' => 'The UPS does not supply power to the load.',
         'unreachable' => 'LibreNMS cannot reach this UPS; the values are from the last successful poll.',
-        'unknown' => 'The UPS does not report where the load is powered from.',
+        'unknown' => 'The UPS reports neither an output status, a mains status nor an input voltage, so the power source cannot be told. Open the row to see which sensors LibreNMS has for it.',
     ],
     'battery_state' => [
         'ok' => 'OK',

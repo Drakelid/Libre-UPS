@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- UPSs without an output status sensor showed the status "Unknown". The power source is now also worked out from a mains / input / utility status ("Mains Status: normal", "Utility Status: No Voltage", "Input Status: Blackout"), from the input voltage (any phase above 50 V means mains, all phases below 20 V means battery) or input frequency, and from charger states (float or charging means mains, discharging means battery). The status tooltip names the sensor it was read from, for example "MainsVolt 1: 230 V".
+- The "UPS Battery" item in the top navigation bar had a permanently dark background on the plugin's pages, as if the mouse were over it. It was marked "active", which Bootstrap draws that way and LibreNMS does not use for its own menus.
+
 ## [1.3.4] - 2026-10-08
 
 ### Fixed

@@ -14,8 +14,9 @@
                 var bar = document.querySelector('#navHeaderCollapse > ul.navbar-nav:not(.navbar-right)');
                 if (!bar || document.getElementById('ub-top-nav')) { return; }
                 var item = document.createElement('li');
+                // No "active" class: Bootstrap draws active items with a permanent dark background, and LibreNMS
+                // does not mark its own top-level menus that way either.
                 item.id = 'ub-top-nav';
-                if (window.location.pathname.indexOf('/plugin/ups-battery/') !== -1) { item.className = 'active'; }
                 var link = document.createElement('a');
                 link.setAttribute('href', source.getAttribute('href'));
                 var icon = document.createElement('i');

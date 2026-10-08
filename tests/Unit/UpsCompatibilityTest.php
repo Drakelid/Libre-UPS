@@ -268,3 +268,92 @@ it('builds the weekly report lists from the UPS overview', function (): void {
         ->and(array_keys($suspect[0]->cells))->toBe(['runtime', 'load', 'charge'])
         ->and($suspect[0]->suspect)->toBeTrue();
 });
+
+it('works out the power source without an output status', function (array $sensors, ?bool $onBattery, ?string $detail): void {
+    $row = compatRow($sensors);
+
+    expect($row->onBattery)->toBe($onBattery)
+        ->and($row->toArray(fn (string $c): string => $c)['status']['detail'])->toBe($detail);
+})->with([
+    'eltek: mains voltage on two of three phases' => [[
+        ['runtime', 'eltek-webpower', '0', 'BatteryTimeLeft', 161.0],
+        ['voltage', 'eltek-webpower', 'mainsVolt.1', 'MainsVolt 1', 230.0, '230 V'],
+        ['voltage', 'eltek-webpower', 'mainsVolt.3', 'MainsVolt 3', 0.0, '0 V'],
+        ['voltage', 'eltek-webpower', 'batteryVoltage.0', 'BatteryVoltage', 54.5, '54.5 V'],
+    ], false, 'MainsVolt 1: 230 V'],
+    'all input phases at 0 V' => [[
+        ['runtime', 'rfc1628', '200', 'Estimated battery time remaining', 20.0],
+        ['voltage', 'rfc1628', '101', 'Input', 0.0, '0 V'],
+        ['voltage', 'rfc1628', '301', 'Output', 230.0, '230 V'],
+    ], true, 'Input: 0 V'],
+    'input frequency only' => [[
+        ['charge', 'x', '0', 'Battery charge', 100.0],
+        ['frequency', 'x', '0', 'Input Frequency', 50.0, '50 Hz'],
+    ], false, 'Input Frequency: 50 Hz'],
+    'eltek: mains status normal' => [[
+        ['runtime', 'eltek-webpower', '0', 'BatteryTimeLeft', 161.0],
+        ['state', 'mainsStatus', '0', 'Mains Status', 1.0, 'normal'],
+    ], false, 'Mains Status: normal'],
+    'mge: utility status no voltage' => [[
+        ['charge', 'eaton-mgeups', '0', 'Remaining battery capacity', 90.0],
+        ['state', 'upsmgOutputUtilityOff', '0', 'Utility Status', 1.0, 'No Voltage', Severity::Critical],
+    ], true, 'Utility Status: No Voltage'],
+    'cyberpower: input status blackout' => [[
+        ['runtime', 'cyberpower', '0', 'Battery Runtime', 20.0],
+        ['state', 'upsAdvanceInputStatus', '0', 'Input Status', 6.0, 'Blackout', Severity::Critical],
+    ], true, 'Input Status: Blackout'],
+    'eltek: charger in float' => [[
+        ['runtime', 'eltek-webpower', '0', 'BatteryTimeLeft', 161.0],
+        ['state', 'systemOperationalStatus.0', '0', 'System operational status', 0.0, 'Float - voltage regulated'],
+    ], false, 'System operational status: Float - voltage regulated'],
+    'NUT: battery charging' => [[
+        ['runtime', 'ups-nut', '3', 'Time Remaining', 25.0],
+        ['state', 'UPSBatteryCharging', '7', 'UPS the battery is charging', 1.0, 'True', Severity::Warning],
+    ], false, 'UPS the battery is charging: UPS the battery is charging'],
+    'nothing to tell' => [[
+        ['runtime', 'x', '0', 'Runtime', 30.0],
+        ['voltage', 'x', '0', 'Output', 230.0, '230 V'],
+    ], null, null],
+]);
+
+it('takes the output status before any fallback, and says which sensor it read', function (): void {
+    $row = compatRow([
+        ['runtime', 'apc', 'upsAdvBatteryRunTimeRemaining.0', 'Runtime', 30.0],
+        ['state', 'upsBasicOutputStatus', '0', 'Output Status', 2.0, 'onLine'],
+        ['voltage', 'apc', '0', 'Input', 0.0, '0 V'],
+    ]);
+
+    expect($row->onBattery)->toBeFalse()
+        ->and($row->toArray(fn (string $c): string => $c)['status'])->toBe(['key' => 'on_mains', 'detail' => 'Output Status: onLine']);
+});
+
+it('recognises mains and input readings', function (string $class, string $index, string $descr, UpsSensorKind $kind): void {
+    expect(UpsSensorKind::of($class, 'x', $index, $descr))->toBe($kind);
+})->with([
+    ['voltage', '101', 'Input', UpsSensorKind::InputVoltage],
+    ['voltage', 'mainsVolt.1', 'MainsVolt 1', UpsSensorKind::InputVoltage],
+    ['voltage', '1', 'Input #1 Voltage', UpsSensorKind::InputVoltage],
+    ['voltage', '1', 'FLATPACK S 48/1800 HE 1 Input Voltage', UpsSensorKind::InputVoltage],
+    ['voltage', '1', 'Input Phase L2', UpsSensorKind::InputVoltage],
+    ['voltage', '301', 'Output', UpsSensorKind::Other],
+    ['voltage', '0', 'BatteryVoltage', UpsSensorKind::Other],
+    ['voltage', '0', 'Bypass', UpsSensorKind::Other],
+    ['voltage', '0', 'Nominal input voltage', UpsSensorKind::Other],
+    ['frequency', '0', 'Input Frequency', UpsSensorKind::InputFrequency],
+    ['frequency', '0', 'Output Frequency', UpsSensorKind::Other],
+    ['state', '0', 'Mains Status', UpsSensorKind::InputState],
+    ['state', '0', 'Input Status', UpsSensorKind::InputState],
+    ['state', '0', 'Input Line Cause', UpsSensorKind::Other],
+]);
+
+it('reads mains status texts', function (string $text, ?bool $expected): void {
+    expect(UpsSensorKind::inputMeansOnBattery($text))->toBe($expected);
+})->with([
+    ['normal', false],
+    ['Output OK', false],
+    ['No Voltage', true],
+    ['Blackout', true],
+    ['Mains failure', true],
+    ['Over Voltage', null],
+    ['unknown', null],
+]);

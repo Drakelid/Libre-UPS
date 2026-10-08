@@ -29,6 +29,11 @@ enum UpsSensorKind: string
     case BatteryState = 'battery_state';
     case OutputState = 'output_state';
     case SelfTestState = 'selftest_state';
+    /** Mains / input / utility status (state sensor). */
+    case InputState = 'input_state';
+    /** Mains / input voltage or frequency reading. */
+    case InputVoltage = 'input_voltage';
+    case InputFrequency = 'input_frequency';
     case Other = 'other';
 
     /** sensor_index prefix of the APC recommended battery replacement date. */
@@ -97,6 +102,8 @@ enum UpsSensorKind: string
             'load' => self::Load,
             'temperature' => self::Temperature,
             'count' => str_starts_with($index, 'upsAdvBatteryNumOfBadBattPacks') ? self::BadPacks : self::Other,
+            'voltage' => self::isInput($type, $index, $descr) ? self::InputVoltage : self::Other,
+            'frequency' => self::isInput($type, $index, $descr) ? self::InputFrequency : self::Other,
             'state' => self::STATES[$type] ?? self::stateByName($type.' '.$descr),
             default => self::Other,
         };
@@ -142,6 +149,8 @@ enum UpsSensorKind: string
         return match (true) {
             preg_match('/self.?test|diagnos|test.?result|battery.?test/', $name) === 1 => self::SelfTestState,
             preg_match('/output.?(source|status|state)|on.?battery|power.?(source|state)/', $name) === 1 => self::OutputState,
+            // "Input Line Cause" is the reason of the last transfer, not the present state.
+            preg_match('/mains|utility|input|\bac\b|line.?(status|fail)/', $name) === 1 && ! str_contains($name, 'cause') => self::InputState,
             preg_match('/batt|replace|charger/', $name) === 1 => self::BatteryState,
             default => self::Other,
         };
@@ -175,6 +184,30 @@ enum UpsSensorKind: string
         }
 
         return str_contains($text, 'batt');
+    }
+
+    /** A voltage or frequency reading of the mains / input side ("Input", "MainsVolt 1", "Input #1 Voltage", "L1"). */
+    private static function isInput(string $type, string $index, string $descr): bool
+    {
+        $text = strtolower($descr.' '.$index);
+
+        return preg_match('/input|mains|utility|\bline\b|\bac\b|\bl[123]\b|phase/', $text) === 1
+            && preg_match('/output|batt|bypass|\bdc\b|load|rectifier.?output|nominal|rating/', $text) !== 1;
+    }
+
+    /**
+     * What a mains / input status text says about the mains: false = mains present ("normal", "Output OK"),
+     * true = mains gone ("No Voltage", "Blackout", "fail"), null = cannot tell (over / under voltage, unknown).
+     */
+    public static function inputMeansOnBattery(string $stateText): ?bool
+    {
+        $text = strtolower(trim($stateText));
+
+        return match (true) {
+            preg_match('/fail|lost|outage|no.?voltage|black.?out|absent|not.?present|power.?off/', $text) === 1 => true,
+            preg_match('/^normal$|^ok$|output ok|present|^good$|^on$|available|^true$/', $text) === 1 => false,
+            default => null,
+        };
     }
 
     /** True/False state texts (NUT flags) say nothing on their own; the cell shows the sensor name instead. */

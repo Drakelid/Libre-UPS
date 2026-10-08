@@ -80,11 +80,12 @@ test('links to the same absolute URL as the Plugins entry, not to the <base href
     dom.window.close();
 });
 
-test('marks the item active on the plugin pages and adds it only once', async () => {
+test('is never drawn as "active" (a permanent dark background) and is added only once', async () => {
     const dom = await load(page(2), '/plugin/ups-battery/report?class=load');
 
     assert.equal(dom.window.document.querySelectorAll('#ub-top-nav').length, 1);
-    assert.equal(dom.window.document.getElementById('ub-top-nav').className, 'active');
+    assert.equal(dom.window.document.getElementById('ub-top-nav').className, '');
+    assert.equal(dom.window.document.querySelector('#navHeaderCollapse .active'), null);
     dom.window.close();
 });
 

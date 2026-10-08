@@ -36,6 +36,7 @@ final readonly class UpsRow
         public BatterySwap $swap,
         public array $sensors,
         public array $issues = [],
+        public ?ReportRow $powerSensor = null,
     ) {}
 
     /** True when anything about the UPS needs a look. */
@@ -61,7 +62,8 @@ final readonly class UpsRow
             'severity' => $this->severity->value,
             'status' => [
                 'key' => UpsLabels::status($this->deviceUp, $this->onBattery, $this->output?->valueFormatted),
-                'detail' => $this->output?->valueFormatted,
+                // The sensor the status was read from, e.g. "Output Status: onLine" or "MainsVolt 1: 230 V".
+                'detail' => ($source = $this->powerSensor ?? $this->output) === null ? null : self::name($source).': '.$source->valueFormatted,
             ],
             'battery_label' => UpsLabels::battery($this->battery?->valueFormatted),
             'self_test_label' => UpsLabels::selfTest($this->selfTest?->valueFormatted),

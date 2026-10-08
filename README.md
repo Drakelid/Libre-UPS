@@ -204,7 +204,7 @@ The plugin reads the sensors LibreNMS discovers, so any UPS that LibreNMS monito
 | `algcom-dc-ups`, `imcopower-*`, `eltek-webpower`, `enexus` and other DC power systems | operation mode / power state | battery and charger states | | |
 | Linux/Unix host with NUT (`ups-nut` SNMP extend) | on battery / on line flags | low battery, replace battery flags | | |
 
-Other vendors' state sensors are recognised by their names (battery, output source, self-test). Runtime-class sensors that are not a remaining battery time (time already spent on battery, battery dates, uptimes, filter and fan run hours) are not used as runtime, so routers, cooling units and similar devices do not appear as UPSs. If a UPS is missing or a column stays empty, run `scripts/verify.sh` and check which sensors LibreNMS has discovered for it.
+Other vendors' state sensors are recognised by their names (battery, output source, self-test). When a UPS has no output status, the *Status* column is worked out from its mains or input status, its input voltage or frequency, or its charger state; the tooltip says which sensor was used. Runtime-class sensors that are not a remaining battery time (time already spent on battery, battery dates, uptimes, filter and fan run hours) are not used as runtime, so routers, cooling units and similar devices do not appear as UPSs. If a UPS is missing or a column stays empty, run `scripts/verify.sh` and check which sensors LibreNMS has discovered for it.
 
 ### Suspect batteries
 

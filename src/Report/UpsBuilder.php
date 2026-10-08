@@ -92,7 +92,7 @@ final class UpsBuilder
         $output = $pick(UpsSensorKind::OutputState, 'worst');
         $selfTest = $pick(UpsSensorKind::SelfTestState, 'worst');
 
-        $onBattery = self::onBattery($output, $pick(UpsSensorKind::OnBatteryTime, 'max'), $battery);
+        [$onBattery, $powerSensor] = self::powerSource($byKind);
         $suspect = SuspectBattery::evaluate($this->rule, $runtime?->value, $load?->value, $charge?->value);
         $swap = BatterySwap::evaluate(
             $installed,
@@ -154,6 +154,7 @@ final class UpsBuilder
             $swap,
             self::sortedSensors($sensors),
             $issues,
+            $powerSensor,
         );
     }
 
@@ -223,28 +224,102 @@ final class UpsBuilder
         return $issues;
     }
 
+    /** Mains present above this input voltage, gone below the lower one (V); in between it says nothing. */
+    private const MAINS_VOLTS = 50.0;
+
+    private const NO_MAINS_VOLTS = 20.0;
+
+    /** Mains present above this input frequency (Hz). */
+    private const MAINS_HZ = 40.0;
+
     /**
-     * Whether the UPS runs on battery, from (in this order) the output state, the time-on-battery counter
-     * (above 0 only while on battery) or a battery state that says the battery is discharging (Eaton XUPS, NUT).
+     * Whether the UPS runs on battery, and the sensor that tells. In this order:
+     *   1. the output state ("onBattery", "On Battery", NUT "UPS on battery: True"),
+     *   2. the time-on-battery counter (above 0 only while on battery),
+     *   3. a mains / input status ("Mains Status: normal", "Utility Status: No Voltage", "Input Status: Blackout"),
+     *   4. the input voltage or frequency (any phase above 50 V means mains, all phases below 20 V means none),
+     *   5. a battery or charger state: discharging means battery, float or charging means mains.
+     *
+     * @param  array<string, ReportRow[]>  $byKind  The UPS's sensors by UpsSensorKind value.
+     * @return array{0: bool|null, 1: ReportRow|null}
      */
-    public static function onBattery(?ReportRow $output, ?ReportRow $onBatteryTime, ?ReportRow $battery): ?bool
+    public static function powerSource(array $byKind): array
     {
-        if ($output !== null) {
+        $kind = fn (UpsSensorKind $k): array => $byKind[$k->value] ?? [];
+
+        // The most severe output state first: with NUT's two flags, "on battery: True" wins over "on line: False".
+        $outputs = $kind(UpsSensorKind::OutputState);
+        usort($outputs, fn (ReportRow $a, ReportRow $b): int => $b->severity->rank() <=> $a->severity->rank());
+        foreach ($outputs as $output) {
             $verdict = UpsSensorKind::meansOnBattery($output->valueFormatted, $output->sensorType.' '.$output->sensorDescr);
             if ($verdict !== null) {
-                return $verdict;
+                return [$verdict, $output];
             }
         }
 
-        if ($onBatteryTime?->value !== null) {
-            return $onBatteryTime->value > 0;
+        foreach ($kind(UpsSensorKind::OnBatteryTime) as $counter) {
+            if ($counter->value !== null) {
+                return [$counter->value > 0, $counter];
+            }
         }
 
-        if ($battery !== null && str_contains(strtolower($battery->valueFormatted), 'discharg')) {
-            return true;
+        $mainsOk = null;
+        foreach ($kind(UpsSensorKind::InputState) as $input) {
+            $verdict = UpsSensorKind::inputMeansOnBattery($input->valueFormatted);
+            if ($verdict === true) {
+                return [true, $input];
+            }
+            $mainsOk ??= $verdict === false ? $input : null;
+        }
+        if ($mainsOk !== null) {
+            return [false, $mainsOk];
         }
 
-        return null;
+        $volts = array_values(array_filter($kind(UpsSensorKind::InputVoltage), fn (ReportRow $v): bool => $v->value !== null));
+        usort($volts, fn (ReportRow $a, ReportRow $b): int => $b->value <=> $a->value);
+        if ($volts !== []) {
+            if ($volts[0]->value > self::MAINS_VOLTS) {
+                return [false, $volts[0]];
+            }
+            if ($volts[0]->value < self::NO_MAINS_VOLTS) {
+                return [true, $volts[0]];
+            }
+        }
+
+        foreach ($kind(UpsSensorKind::InputFrequency) as $hz) {
+            if ($hz->value !== null && $hz->value > self::MAINS_HZ) {
+                return [false, $hz];
+            }
+        }
+
+        $states = array_merge($kind(UpsSensorKind::BatteryState), $kind(UpsSensorKind::Other));
+        foreach ($states as $state) {
+            $text = strtolower($state->valueFormatted);
+            if ($state->sensorClass === 'state' && str_contains($text, 'discharg')) {
+                return [true, $state];
+            }
+        }
+        foreach ($states as $state) {
+            $text = strtolower($state->valueFormatted);
+            if ($state->sensorClass === 'state' && (str_contains($text, 'float') || preg_match('/(?<!dis)charging/', $text) === 1)) {
+                return [false, $state];
+            }
+        }
+
+        return [null, null];
+    }
+
+    /**
+     * Whether the UPS runs on battery, from its output state, time on battery or battery state only.
+     * Kept for callers that have just these three sensors; the overview uses powerSource().
+     */
+    public static function onBattery(?ReportRow $output, ?ReportRow $onBatteryTime, ?ReportRow $battery): ?bool
+    {
+        return self::powerSource(array_filter([
+            UpsSensorKind::OutputState->value => $output === null ? [] : [$output],
+            UpsSensorKind::OnBatteryTime->value => $onBatteryTime === null ? [] : [$onBatteryTime],
+            UpsSensorKind::BatteryState->value => $battery === null ? [] : [$battery],
+        ]))[0];
     }
 
     /** Whether a summary card counts the UPS; the same test filters the table when the card is clicked. */
