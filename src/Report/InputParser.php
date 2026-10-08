@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drakelid\UpsBattery\Report;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 
 /** Shared, strict parsing of raw query-string values. */
@@ -101,6 +102,31 @@ final class InputParser
         }
 
         return $limit;
+    }
+
+    /**
+     * Battery install date (Y-m-d). Empty means "no date" (null). The date may not lie in the future
+     * or before 1990.
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function parseInstallDate(mixed $raw, DateTimeImmutable $today): ?string
+    {
+        $value = self::nullableString($raw, 'installed');
+        if ($value === null) {
+            return null;
+        }
+
+        $date = BatterySwap::parseDate($value);
+        if ($date === null) {
+            throw new InvalidArgumentException("Invalid date \"$value\", use YYYY-MM-DD.");
+        }
+
+        if ($value > $today->format('Y-m-d') || $value < '1990-01-01') {
+            throw new InvalidArgumentException("The date \"$value\" lies in the future or too far back.");
+        }
+
+        return $value;
     }
 
     /** Free-text search: trimmed, empty becomes null, cut at MAX_QUERY_LENGTH characters. */

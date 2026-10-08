@@ -78,7 +78,45 @@ const DEFAULT_ROUTES = {
         ],
     }),
     '/plugin/ups-battery/views': { views: [] },
+    '/plugin/ups-battery/ups': (url) => ({
+        filters: { sort: url.searchParams.get('sort') || 'status', dir: url.searchParams.get('dir') || 'desc' },
+        total: 2,
+        warn_days: 90,
+        lifetime_months: 48,
+        can_edit: true,
+        cards: { devices: 2, on_battery: 1, swap_overdue: 1, swap_due: 0, swap_unknown: 1, battery_alarm: 1, lowest_runtime: { display_name: 'UPS A', device_url: '/device/1', value_formatted: '4 min' } },
+        rows: [
+            upsRow({
+                severity: 'critical', on_battery: true, suspect: true,
+                output: cell('onBattery', 'warning'),
+                bad_packs: { ...cell('1', 'critical'), value: 1 },
+                swap: { installed: '2020-01-01', due: '2024-01-01', days_left: -1011, source: 'manual', severity: 'critical' },
+            }),
+            upsRow({
+                device_id: 2, hostname: 'ups-b', display_name: 'UPS B', device_url: '/device/2', severity: 'ok', on_battery: false,
+                runtime: cell('40 min', 'ok'), output: cell('onLine', 'ok'),
+                swap: { installed: null, due: null, days_left: null, source: 'none', severity: 'unknown' },
+            }),
+        ],
+    }),
+    '/plugin/ups-battery/battery': (url, init) => ({ ...JSON.parse(init.body) }),
 };
+
+function upsRow(overrides = {}) {
+    return {
+        device_id: 1, hostname: 'ups-a', display_name: 'UPS A', device_url: '/device/1', location: 'Site A', os: 'apc', device_up: true,
+        severity: 'ok', on_battery: null, suspect: false,
+        runtime: cell('4 min', 'critical'), charge: cell('100 %', 'ok'), load: cell('10 %', 'ok'), temperature: cell('31 °C', 'warning'),
+        battery: cell('noBatteryNeedsReplacing', 'ok'), bad_packs: null, output: null, self_test: cell('ok', 'ok'),
+        swap: { installed: null, due: null, days_left: null, source: 'none', severity: 'unknown' },
+        sensors: [
+            { class: 'voltage', label: 'Voltage', sensor_descr: 'Input', value_formatted: '230 V', severity: 'ok', sensor_url: '/s/1', graph_url: '/g/1' },
+            { class: 'voltage', label: 'Voltage', sensor_descr: 'Output', value_formatted: '229 V', severity: 'ok', sensor_url: '/s/2', graph_url: '/g/2' },
+            { class: 'frequency', label: 'Frequency', sensor_descr: 'Input', value_formatted: '50 Hz', severity: 'warning', sensor_url: '/s/3', graph_url: '/g/3' },
+        ],
+        ...overrides,
+    };
+}
 
 function cell(formatted, severity) {
     return { sensor_id: 1, sensor_descr: 'x', sensor_url: '/s', graph_url: '/g', trend_url: '/t', value: 1, value_formatted: formatted, unit: '', severity, last_updated: new Date().toISOString() };
@@ -91,16 +129,18 @@ const windows = [];
 after(() => { windows.forEach((window) => window.close()); });
 
 /** Opens the page with the script running. `search` is the query string of the address, e.g. "?kiosk=1". */
-async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0 } = {}) {
+async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0, defaultView = undefined } = {}) {
     const config = {
         defaults: { type: 'power', class: 'runtime', limit: 25 },
         initial,
         matrixDefaults: ['runtime', 'load', 'charge'],
+        defaultView,
         refreshSeconds,
         staleMinutes: 30,
         urls: {
             page: PAGE, data: '/plugin/ups-battery/data', matrix: '/plugin/ups-battery/matrix', options: '/plugin/ups-battery/options',
             views: '/plugin/ups-battery/views', saveView: '/plugin/ups-battery/views', deleteView: '/plugin/ups-battery/views/delete',
+            ups: '/plugin/ups-battery/ups', battery: '/plugin/ups-battery/battery',
         },
         i18n: stubTexts(),
     };
@@ -399,4 +439,137 @@ test('auto-refresh is offered only when the plugin setting allows it', async () 
 
     assert.equal(off.$('ub-refresh-group').style.display, 'none');
     assert.equal(on.$('ub-refresh').checked, true);
+});
+
+// ---- UPS overview ----
+
+test('UPS overview: is the default view and asks for one row per UPS', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const ups = page.last('/plugin/ups-battery/ups');
+
+    assert.ok(ups, 'the UPS endpoint was called');
+    assert.equal(page.last('/plugin/ups-battery/data'), undefined);
+    assert.equal(ups.params.get('view'), 'ups');
+    assert.equal(ups.params.get('class'), null);
+    assert.equal(ups.params.get('sensor'), null);
+    assert.equal(page.$('ub-view-ups').checked, true);
+    assert.equal(page.$('ub-class-group').style.display, 'none');
+    assert.equal(page.$('ub-sensor-group').style.display, 'none');
+    assert.equal(page.$('ub-attention-group').style.display, '');
+    assert.equal(page.$('ub-cards').style.display, '');
+    assert.ok(new URL(page.$('ub-csv').href).pathname.endsWith('/plugin/ups-battery/ups'));
+});
+
+test('UPS overview: shows the summary cards', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const cards = [...page.document.querySelectorAll('#ub-cards .ub-card')];
+
+    assert.equal(cards.length, 7);
+    assert.equal(cards[0].querySelector('.ub-card-value').textContent, '2');
+    assert.ok(cards[1].classList.contains('ub-danger'), 'on battery is red');
+    assert.ok(!cards[3].classList.contains('ub-warn'), 'nothing due within the window');
+    assert.equal(cards[6].querySelector('a').getAttribute('href'), ORIGIN + '/device/1');
+});
+
+test('UPS overview: one row per UPS with power, battery and swap data', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const [first, second] = page.rows();
+    const cells = (tr) => [...tr.children];
+
+    assert.equal(page.rows().length, 2);
+    assert.ok(first.classList.contains('danger'));
+    assert.equal(cells(first)[1].textContent, 'UPS A');
+    assert.equal(cells(first)[3].querySelector('.label-danger').textContent, 'ups.on_battery');
+    assert.ok(cells(first)[4].classList.contains('danger'), 'runtime cell is red');
+    assert.ok(cells(first)[8].textContent.includes('ups.bad_packs'));
+    assert.ok(cells(first)[8].textContent.includes('suspect.yes'));
+    assert.ok(cells(first)[10].textContent.startsWith('2020-01-01'));
+    assert.ok(cells(first)[11].textContent.startsWith('2024-01-01'));
+    assert.ok(cells(first)[11].classList.contains('danger'));
+    assert.equal(cells(second)[3].querySelector('.label-success').textContent, 'ups.on_mains');
+    assert.equal(cells(second)[11].textContent, '–');
+});
+
+test('UPS overview: a row opens to show all sensors grouped by class', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const toggle = page.rows()[0].querySelector('.ub-toggle');
+
+    toggle.click();
+    const details = page.document.querySelector('#ub-body tr.ub-details');
+    assert.ok(details, 'details row added');
+    assert.deepEqual([...details.querySelectorAll('dt')].map((dt) => dt.textContent), ['Voltage', 'Frequency']);
+    assert.ok(details.querySelector('dd').textContent.includes('Input: 230 V'));
+    assert.ok(details.querySelector('.text-warning'), 'warning sensor is coloured');
+
+    toggle.click();
+    assert.equal(page.document.querySelector('#ub-body tr.ub-details'), null);
+});
+
+test('UPS overview: the battery install date can be set and the list reloads', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    page.window.prompt = () => ' 2025-03-01 ';
+    const before = page.calls.filter((c) => c.path === '/plugin/ups-battery/ups').length;
+
+    page.rows()[1].querySelector('.ub-edit').click();
+    await wait();
+
+    const post = page.last('/plugin/ups-battery/battery');
+    assert.equal(post.method, 'POST');
+    assert.deepEqual(JSON.parse(post.body), { device_id: 2, installed: '2025-03-01' });
+    assert.equal(post.headers['X-CSRF-TOKEN'], 'token-123');
+    assert.equal(page.calls.filter((c) => c.path === '/plugin/ups-battery/ups').length, before + 1);
+});
+
+test('UPS overview: cancelling the date prompt changes nothing, and no edit button without permission', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    page.window.prompt = () => null;
+    page.rows()[0].querySelector('.ub-edit').click();
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/battery'), undefined);
+
+    const readOnly = await boot({
+        defaultView: 'ups',
+        routes: { '/plugin/ups-battery/ups': (url) => ({ ...DEFAULT_ROUTES['/plugin/ups-battery/ups'](url), can_edit: false }) },
+    });
+    assert.equal(readOnly.document.querySelector('.ub-edit'), null);
+});
+
+test('UPS overview: the attention filter and sorting go to the server', async () => {
+    const page = await boot({ defaultView: 'ups' });
+
+    page.$('ub-attention').checked = true;
+    fire(page.window, page.$('ub-attention'), 'change');
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('attention'), '1');
+
+    page.document.querySelector('#ub-head th[data-sort="swap"]').click();
+    await wait();
+    const sorted = page.last('/plugin/ups-battery/ups');
+    assert.equal(sorted.params.get('sort'), 'swap');
+    assert.equal(sorted.params.get('dir'), null, 'the server picks the direction');
+    assert.equal(new URL(page.window.location.href).searchParams.get('attention'), '1');
+});
+
+test('UPS overview: addresses from before it still open the single view', async () => {
+    const page = await boot({ defaultView: 'ups', search: '?class=load', initial: { class: 'load' } });
+
+    assert.equal(page.$('ub-view-single').checked, true);
+    assert.equal(page.last('/plugin/ups-battery/data').params.get('class'), 'load');
+    assert.equal(page.$('ub-cards').style.display, 'none');
+});
+
+test('UPS overview: switching views keeps working', async () => {
+    const page = await boot({ defaultView: 'ups' });
+
+    page.$('ub-view-matrix').checked = true;
+    fire(page.window, page.$('ub-view-matrix'), 'change');
+    await wait();
+    assert.ok(page.last('/plugin/ups-battery/matrix'));
+    assert.equal(page.$('ub-cards').style.display, 'none');
+
+    page.$('ub-view-ups').checked = true;
+    fire(page.window, page.$('ub-view-ups'), 'change');
+    await wait();
+    assert.equal(page.$('ub-cards').style.display, '');
+    assert.equal(page.rows().length, 2);
 });

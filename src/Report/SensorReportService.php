@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drakelid\UpsBattery\Report;
 
 use App\Models\Device;
+use App\Models\DeviceAttrib;
 use App\Models\DeviceGroup;
 use App\Models\Sensor;
 use App\Models\User;
@@ -12,6 +13,7 @@ use App\Models\UserPref;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use InvalidArgumentException;
 use LibreNMS\Util\Url;
 use stdClass;
 use Throwable;
@@ -29,6 +31,12 @@ use Throwable;
 final class SensorReportService
 {
     public const MAX_ROWS = 50000;
+
+    /** Most UPSs the UPS overview loads. */
+    public const MAX_UPS = 5000;
+
+    /** Device attribute (LibreNMS devices_attribs) that holds the battery install date, Y-m-d. */
+    public const INSTALLED_ATTRIB = 'ups-battery.battery_installed';
 
     /** Seconds the filter options are cached per user. */
     private const OPTIONS_TTL = 60;
@@ -218,6 +226,114 @@ final class SensorReportService
     }
 
     /**
+     * UPS overview: one row per UPS (a device with a runtime or charge sensor) with all its sensors,
+     * the battery install date entered by users and the summary cards.
+     *
+     * @return array{rows: UpsRow[], total: int, cards: array<string, mixed>}
+     *
+     * @throws TooManyRowsException
+     */
+    public function ups(?User $user, UpsFilters $filters, PluginSettings $settings): array
+    {
+        $deviceIds = $this->baseQuery($user, ['runtime', 'charge'], $filters->type, $filters->os, $filters->group, $filters->q, null)
+            ->distinct()
+            ->limit(self::MAX_UPS + 1)
+            ->pluck('sensors.device_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        if (count($deviceIds) > self::MAX_UPS) {
+            throw new TooManyRowsException(self::MAX_UPS);
+        }
+
+        $fahrenheit = $this->usesFahrenheit($user);
+        $sensorsByDevice = [];
+        if ($deviceIds !== []) {
+            $sensors = Sensor::query()
+                ->leftJoin('devices', 'devices.device_id', '=', 'sensors.device_id')
+                ->leftJoin('locations', 'locations.id', '=', 'devices.location_id')
+                ->whereIntegerInRaw('sensors.device_id', $deviceIds)
+                ->where('sensors.sensor_deleted', 0)
+                ->select('sensors.*', 'locations.location as location_name')
+                ->with(['device', 'translations'])
+                ->get();
+
+            foreach ($sensors as $sensor) {
+                if ($sensor->device !== null) {
+                    $sensorsByDevice[(int) $sensor->device_id][] = $this->toRow($sensor, $fahrenheit, $settings->thresholds);
+                }
+            }
+        }
+
+        $builder = new UpsBuilder($settings->suspectRule, $settings->batteryLifetimeMonths, $settings->swapWarnDays, Carbon::now()->toImmutable());
+
+        return $builder->build($sensorsByDevice, $this->installedDates($deviceIds), $filters);
+    }
+
+    /** Stores the battery install date of a UPS the user can see (null removes it). */
+    public function setBatteryInstalled(User $user, int $deviceId, ?string $date): void
+    {
+        $device = Device::query()->hasAccess($user)->where('devices.device_id', $deviceId)->first();
+        if ($device === null) {
+            throw new InvalidArgumentException('Unknown device.');
+        }
+
+        if ($date === null) {
+            $device->forgetAttrib(self::INSTALLED_ATTRIB);
+        } else {
+            $device->setAttrib(self::INSTALLED_ATTRIB, $date);
+        }
+    }
+
+    /** Next battery swap of one device, for the device overview card. */
+    public function deviceSwap(Device $device, PluginSettings $settings): BatterySwap
+    {
+        $dates = Sensor::query()
+            ->where('sensors.device_id', $device->device_id)
+            ->where('sensors.sensor_deleted', 0)
+            ->where('sensors.sensor_class', 'runtime')
+            ->where(function ($q): void {
+                foreach (UpsSensorKind::DATE_RUNTIME_INDEXES as $prefix) {
+                    $q->orWhere('sensors.sensor_index', 'like', $prefix.'%');
+                }
+            })
+            ->get();
+
+        $find = fn (string $prefix) => $dates->first(fn (Sensor $s): bool => str_starts_with((string) $s->sensor_index, $prefix));
+        $due = $find(UpsSensorKind::REPLACE_DUE_INDEX);
+        $replaced = $find(UpsSensorKind::REPLACED_AT_INDEX);
+        $installed = $device->getAttrib(self::INSTALLED_ATTRIB);
+
+        return BatterySwap::evaluate(
+            is_string($installed) ? $installed : null,
+            $this->floatOrNull($due?->sensor_current),
+            $this->floatOrNull($replaced?->sensor_current),
+            $this->iso(($due ?? $replaced)?->lastupdate),
+            $settings->batteryLifetimeMonths,
+            $settings->swapWarnDays,
+            Carbon::now()->toImmutable(),
+        );
+    }
+
+    /**
+     * @param  int[]  $deviceIds
+     * @return array<int, string>
+     */
+    private function installedDates(array $deviceIds): array
+    {
+        if ($deviceIds === []) {
+            return [];
+        }
+
+        return DeviceAttrib::query()
+            ->whereIntegerInRaw('device_id', $deviceIds)
+            ->where('attrib_type', self::INSTALLED_ATTRIB)
+            ->pluck('attrib_value', 'device_id')
+            ->mapWithKeys(fn ($value, $id): array => [(int) $id => (string) $value])
+            ->all();
+    }
+
+    /**
      * Battery-related sensors of one device (device overview card).
      *
      * @return ReportRow[]
@@ -248,9 +364,10 @@ final class SensorReportService
     private function deviceCardQuery(Device $device): Builder
     {
         return Sensor::query()
-            ->where('device_id', $device->device_id)
-            ->where('sensor_deleted', 0)
-            ->whereIn('sensor_class', self::DEVICE_CARD_CLASSES);
+            ->where('sensors.device_id', $device->device_id)
+            ->where('sensors.sensor_deleted', 0)
+            ->whereIn('sensors.sensor_class', self::DEVICE_CARD_CLASSES)
+            ->tap(fn ($query) => $this->withoutDateRuntimes($query));
     }
 
     /**
@@ -294,7 +411,25 @@ final class SensorReportService
         return $rows;
     }
 
-    private function baseQuery(?User $user, string $class, ?string $type, ?string $os, ?int $group, ?string $q, ?string $sensorName): Builder
+    /**
+     * Leaves out the runtime sensors whose value is a date (APC battery replacement dates): they are not a
+     * runtime and would otherwise be the "shortest runtime" of the UPS.
+     */
+    private function withoutDateRuntimes(Builder $query): void
+    {
+        $query->where(function ($w): void {
+            $w->where('sensors.sensor_class', '!=', 'runtime');
+            $w->orWhereNull('sensors.sensor_index');
+            $w->orWhere(function ($runtime): void {
+                foreach (UpsSensorKind::DATE_RUNTIME_INDEXES as $prefix) {
+                    $runtime->where('sensors.sensor_index', 'not like', $prefix.'%');
+                }
+            });
+        });
+    }
+
+    /** @param  string|string[]  $class */
+    private function baseQuery(?User $user, string|array $class, ?string $type, ?string $os, ?int $group, ?string $q, ?string $sensorName): Builder
     {
         $like = $q === null ? null : '%'.addcslashes($q, '%_\\').'%';
         $sensorLike = $sensorName === null ? null : '%'.addcslashes($sensorName, '%_\\').'%';
@@ -303,7 +438,8 @@ final class SensorReportService
             ->when($user, fn ($query) => $query->hasAccess($user))
             ->join('devices', 'devices.device_id', '=', 'sensors.device_id')
             ->leftJoin('locations', 'locations.id', '=', 'devices.location_id')
-            ->where('sensors.sensor_class', $class)
+            ->whereIn('sensors.sensor_class', (array) $class)
+            ->tap(fn ($query) => $this->withoutDateRuntimes($query))
             ->where('sensors.sensor_deleted', 0)
             ->where('devices.disabled', 0)
             ->when($type, fn ($query) => $query->where('devices.type', $type))
@@ -407,6 +543,8 @@ final class SensorReportService
             trendUrl: $this->trendUrl($sensor),
             sensorClass: $class,
             hydrated: true,
+            sensorType: (string) $sensor->sensor_type,
+            sensorIndex: (string) $sensor->sensor_index,
         );
     }
 
@@ -505,7 +643,7 @@ final class SensorReportService
         return $value !== null && $fahrenheit && $class === 'temperature' ? $value * 9 / 5 + 32 : $value;
     }
 
-    private function classLabel(string $class): string
+    public function classLabel(string $class): string
     {
         return $this->translate("sensors.$class.short", ucfirst(str_replace('_', ' ', $class)));
     }

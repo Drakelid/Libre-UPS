@@ -19,7 +19,7 @@ final class SavedViews
     private const MAX_VALUE_LENGTH = 200;
 
     /** Query parameters a saved view may contain. */
-    private const ALLOWED_KEYS = ['view', 'type', 'class', 'classes', 'os', 'group', 'q', 'sensor', 'suspect', 'sort', 'dir', 'limit', 'aggregate'];
+    private const ALLOWED_KEYS = ['view', 'type', 'class', 'classes', 'os', 'group', 'q', 'sensor', 'suspect', 'attention', 'sort', 'dir', 'limit', 'aggregate'];
 
     /**
      * @param  mixed  $stored  JSON string, decoded array or null as returned by the preference store

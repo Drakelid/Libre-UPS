@@ -8,6 +8,7 @@
         'defaults' => $defaults,
         'initial' => $initial,
         'matrixDefaults' => $matrixDefaults,
+        'defaultView' => $defaultView,
         'refreshSeconds' => $refreshSeconds,
         'staleMinutes' => $staleMinutes,
         // Relative URLs keep the page working behind proxies / under a different host name or sub-directory.
@@ -16,6 +17,8 @@
             'data' => $url('ups-battery.data'),
             'matrix' => $url('ups-battery.matrix'),
             'options' => $url('ups-battery.options'),
+            'ups' => $url('ups-battery.ups'),
+            'battery' => $url('ups-battery.battery'),
             'views' => $url('ups-battery.views'),
             'saveView' => $url('ups-battery.views.save'),
             'deleteView' => $url('ups-battery.views.delete'),
@@ -35,6 +38,18 @@
     #ups-battery.ub-kiosk #ub-summary { font-size: 1.3em; }
     #ups-battery .ub-trend { margin-left: 6px; opacity: .6; }
     #ups-battery .ub-trend:hover { opacity: 1; }
+    #ups-battery .ub-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+    #ups-battery .ub-card { flex: 1 1 140px; max-width: 220px; border: 1px solid #ddd; border-radius: 4px; padding: 8px 12px; }
+    #ups-battery .ub-card-value { font-size: 1.8em; font-weight: bold; line-height: 1.2; }
+    #ups-battery .ub-card-label { font-size: .9em; opacity: .8; }
+    #ups-battery .ub-card.ub-danger { border-color: #d9534f; color: #d9534f; }
+    #ups-battery .ub-card.ub-warn { border-color: #f0ad4e; color: #c77c0e; }
+    #ups-battery .ub-details td { background: rgba(127, 127, 127, .06); }
+    #ups-battery .ub-details dl { margin: 4px 0; }
+    #ups-battery .ub-details dt { float: left; clear: left; width: 140px; font-weight: bold; }
+    #ups-battery .ub-details dd { margin-left: 150px; }
+    #ups-battery .ub-toggle, #ups-battery .ub-edit { padding: 0 4px; }
+    #ups-battery.ub-kiosk .ub-card-value { font-size: 2.6em; }
 </style>
 @endpush
 
@@ -52,6 +67,7 @@
             <div class="panel-body">
                 <form class="form-inline" id="ub-filters" onsubmit="return false;">
                     <div class="form-group">
+                        <label class="radio-inline"><input type="radio" name="ub-view" id="ub-view-ups" value="ups"> {{ $t('view.ups') }}</label>
                         <label class="radio-inline"><input type="radio" name="ub-view" id="ub-view-single" value="single"> {{ $t('view.single') }}</label>
                         <label class="radio-inline"><input type="radio" name="ub-view" id="ub-view-matrix" value="matrix"> {{ $t('view.matrix') }}</label>
                     </div>
@@ -88,7 +104,7 @@
                         <input type="search" id="ub-q" class="form-control input-sm" maxlength="100"
                                placeholder="{{ $t('filters.search_placeholder') }}">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="ub-sensor-group">
                         <label for="ub-sensor" class="sr-only">{{ $t('filters.sensor') }}</label>
                         <input type="search" id="ub-sensor" class="form-control input-sm" maxlength="100"
                                placeholder="{{ $t('filters.sensor_placeholder') }}" title="{{ $t('filters.sensor') }}">
@@ -97,6 +113,9 @@
                         <label class="checkbox-inline" title="{{ $t('suspect.tooltip') }}">
                             <input type="checkbox" id="ub-suspect"> {{ $t('filters.suspect') }}
                         </label>
+                    </div>
+                    <div class="form-group" id="ub-attention-group" style="display: none;">
+                        <label class="checkbox-inline"><input type="checkbox" id="ub-attention"> {{ $t('filters.attention') }}</label>
                     </div>
                     <div class="form-group" id="ub-refresh-group">
                         <label class="checkbox-inline"><input type="checkbox" id="ub-refresh"> {{ $t('filters.refresh') }}</label>
@@ -129,6 +148,7 @@
 
     <div id="ub-error" class="alert alert-danger" style="display: none;" role="alert"></div>
     <p id="ub-hint" class="text-muted" style="display: none;">{{ $t('view.matrix_hint') }}</p>
+    <div id="ub-cards" class="ub-cards" style="display: none;"></div>
     <p id="ub-summary" class="text-muted" aria-live="polite"></p>
 
     <div class="table-responsive">

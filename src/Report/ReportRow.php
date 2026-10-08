@@ -35,6 +35,8 @@ final readonly class ReportRow
         public string $trendUrl = '',
         public string $sensorClass = '',
         public bool $hydrated = true,
+        public string $sensorType = '',
+        public string $sensorIndex = '',
     ) {}
 
     /** Copy with the presentation fields that are only needed for the rows that are actually shown. */
@@ -64,7 +66,17 @@ final readonly class ReportRow
             $trendUrl,
             $this->sensorClass,
             true,
+            $this->sensorType,
+            $this->sensorIndex,
         );
+    }
+
+    public function withSeverity(Severity $severity): self
+    {
+        $values = get_object_vars($this);
+        $values['severity'] = $severity;
+
+        return new self(...$values);
     }
 
     /** @return array<string, mixed> */

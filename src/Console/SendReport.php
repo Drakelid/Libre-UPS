@@ -9,6 +9,7 @@ use Drakelid\UpsBattery\Report\PluginSettings;
 use Drakelid\UpsBattery\Report\ReportFilters;
 use Drakelid\UpsBattery\Report\ReportSchedule;
 use Drakelid\UpsBattery\Report\SensorReportService;
+use Drakelid\UpsBattery\Report\UpsFilters;
 use Drakelid\UpsBattery\Report\Urls;
 use Drakelid\UpsBattery\Report\WeeklyReport;
 use Drakelid\UpsBattery\UpsBatteryProvider;
@@ -29,7 +30,7 @@ class SendReport extends Command
         {--to= : Comma separated recipients (default: the recipients in the plugin settings)}
         {--dry-run : Print the report instead of sending it}';
 
-    protected $description = 'Email the weekly UPS battery report (shortest runtime and suspect batteries)';
+    protected $description = 'Email the weekly UPS battery report (shortest runtime, suspect batteries, battery swaps due)';
 
     public function handle(SensorReportService $service, PluginManagerInterface $plugins): int
     {
@@ -65,6 +66,7 @@ class SendReport extends Command
                 $settings->thresholds,
                 $settings->suspectRule,
             );
+            $ups = $service->ups(null, UpsFilters::fromArray(['sort' => 'swap', 'limit' => '0'], $defaults), $settings);
         } catch (InvalidArgumentException $e) {
             // Typically: the device type or metric in the plugin settings does not exist (any more).
             $this->error('Could not build the report: '.$e->getMessage());
@@ -87,6 +89,8 @@ class SendReport extends Command
             $counts,
             $runtime['rows'],
             $suspect['rows'],
+            WeeklyReport::swapsDue($ups['rows'], $settings->swapWarnDays),
+            $settings->swapWarnDays,
         );
         $subject = WeeklyReport::subject($t, $counts);
 

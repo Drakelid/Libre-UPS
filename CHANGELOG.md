@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **UPS overview**, the new default view of the page (`view=ups`, endpoint `plugin/ups-battery/ups`, JSON and CSV): one row per UPS (a device with a runtime or charge sensor) with
+  - power status (on battery / on mains, from the output state sensor), runtime, charge, load and temperature,
+  - battery status (replace-battery indicator, battery status), bad battery packs, the suspect battery verdict and the last self-test result,
+  - the battery install date and the **next battery swap** with the days left,
+  - all other sensors of the UPS (input/output voltage, frequency, current, ...) in a row that opens below it.
+  
+  Above the table, summary cards count the UPSs, those on battery, overdue swaps, swaps due within the warning window, UPSs without a swap date and battery problems, and show the lowest runtime. A "Needs attention only" filter keeps the UPSs with any warning or critical value. Rows are sorted worst first.
+- **Next battery swap:** the install date entered per UPS (stored as the LibreNMS device attribute `ups-battery.battery_installed`, editable by users who may update devices, endpoint `POST plugin/ups-battery/battery`) plus the battery lifetime setting (48 months by default). Without an install date, the replacement date the UPS reports is used (APC: recommended replacement date, or the last replacement date plus the lifetime). New settings: battery lifetime and how many days before the swap to warn (90 by default).
+- The device page card shows the next battery swap.
+- The weekly email lists the battery swaps that are overdue or due within the warning window.
+
+### Fixed
+
+- LibreNMS stores the APC battery dates ("Battery Recommended Days Remaining", "Last Battery Replacement") as runtime sensors. They were listed as runtimes, could be the "shortest runtime" of a UPS and made the suspect battery check misfire. They are now left out of every runtime report and used for the battery swap instead.
+- Links on the device page card were host-relative and could point to the `base_url` host; they are now absolute on the current host.
+
+### Changed
+
+- The page opens in the UPS overview. Links and saved views without a `view` parameter still open the single metric view.
+
+### Known limits
+
+- The date of the last self-test is not shown: LibreNMS does not store it as a sensor. Only the result is shown, where the UPS reports one.
+- Which state sensors mean "battery status", "output source" and "self-test" is known for APC (PowerNet-MIB) and the standard UPS-MIB (RFC 1628); for other vendors it is guessed from the sensor name.
+
 ## [1.1.2] - 2026-10-08
 
 ### Fixed

@@ -23,6 +23,18 @@
                     <i class="fa fa-exclamation-triangle fa-fw" aria-hidden="true"></i> {{ $t('device_card.suspect') }}
                 </div>
             @endif
+            @isset($swap)
+                <p @class(['text-danger' => $swap->severity->value === 'critical', 'text-warning' => $swap->severity->value === 'warning']) style="margin: 8px;">
+                    <i class="fa fa-calendar fa-fw" aria-hidden="true"></i> <strong>{{ $t('device_card.swap') }}:</strong>
+                    @if ($swap->due === null)
+                        {{ $t('device_card.swap_unknown') }}
+                    @elseif ($swap->daysLeft < 0)
+                        {{ $t('device_card.swap_overdue', ['date' => $swap->due, 'n' => -$swap->daysLeft]) }}
+                    @else
+                        {{ $t('device_card.swap_in', ['date' => $swap->due, 'n' => $swap->daysLeft]) }}
+                    @endif
+                </p>
+            @endisset
             <table class="table table-condensed table-hover">
                 <thead>
                     <tr>
@@ -36,7 +48,7 @@
                         <tr class="{{ $rowClass($row->severity) }}">
                             <td>
                                 @if ($row->sensorUrl !== '')
-                                    <a href="{{ $row->sensorUrl }}">{{ $row->sensorDescr }}</a>
+                                    <a href="{{ url($row->sensorUrl) }}">{{ $row->sensorDescr }}</a>
                                 @else
                                     {{ $row->sensorDescr }}
                                 @endif
@@ -44,7 +56,7 @@
                             <td>
                                 <strong>{{ $row->valueFormatted }}</strong>
                                 @if ($row->trendUrl !== '')
-                                    <a href="{{ $row->trendUrl }}" title="{{ $t('trend') }}" style="margin-left: 6px; opacity: .6;">
+                                    <a href="{{ url($row->trendUrl) }}" title="{{ $t('trend') }}" style="margin-left: 6px; opacity: .6;">
                                         <i class="fa fa-line-chart" aria-hidden="true"></i><span class="sr-only">{{ $t('trend') }}</span>
                                     </a>
                                 @endif

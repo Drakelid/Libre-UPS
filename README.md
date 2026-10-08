@@ -7,8 +7,10 @@
 
 **Rank your UPSes by battery runtime, load or any other sensor, on one page in LibreNMS.**
 
-Pick a device type and a metric and get a sorted list of hostnames with their current value. Typical questions it answers:
+Open it for an overview of every UPS: power status, runtime, charge, load, temperature, battery status, self-test and **when the battery is due for replacement**. Or pick a device type and a metric and get a sorted list of hostnames with their current value. Typical questions it answers:
 
+- Which UPS batteries are **due for replacement**, and how many days are left?
+- Which UPSes are **on battery** right now, or report a battery problem?
 - Which UPSes have the **shortest battery runtime**?
 - Which UPSes carry the **highest load**?
 - How do runtime, load and charge compare **side by side** for every UPS?
@@ -31,6 +33,7 @@ ups-stasjon-03   Stasjon C   Battery runtime  18 minutes        4 min ago
 
 **Reports**
 
+- **UPS overview** (the page opens here): one row per UPS with power status (on battery / on mains), runtime, charge, load, temperature, battery status, bad battery packs, suspect battery, last self-test result, battery install date and the **next battery swap** with the days left. A row opens to show every other sensor of the UPS (input/output voltage, frequency, ...). Summary cards above the table count UPSs on battery, overdue swaps, swaps due soon and battery problems, and show the lowest runtime. "Needs attention only" hides the UPSs without a problem. See [Battery replacement](#battery-replacement).
 - **Single metric view:** ranked table of hostname, location, sensor, value and last update. Filter on device type, metric, OS, device group, sensor name and free text (hostname, sysName, display name, location).
 - **Compare metrics view:** one row per device and one column per metric (up to six). Each cell shows the device's *worst* sensor for that metric, for example the shortest runtime or the highest load.
 - Sort on any column, show the top 10, 25, 50, 100 or all rows, and optionally reduce each device to its lowest or highest sensor.
@@ -39,7 +42,8 @@ ups-stasjon-03   Stasjon C   Battery runtime  18 minutes        4 min ago
 **Battery health**
 
 - **Suspect batteries:** a battery is flagged when the runtime is short *although* the load is low and the battery is charged, which points to a worn battery rather than a busy UPS. Shown as a "Battery" column in the compare view, as a filter, as a warning on the device page and in the weekly report (see [Suspect batteries](#suspect-batteries)).
-- **Weekly email report** with the UPSes that have the shortest runtime and the suspect batteries (see [Weekly report](#weekly-email-report)).
+- **Next battery swap** per UPS, from the install date you enter (or the date the UPS reports) and the battery lifetime, on the UPS overview, the device page and in the weekly report.
+- **Weekly email report** with the UPSes that have the shortest runtime, the suspect batteries and the battery swaps that are due (see [Weekly report](#weekly-email-report)).
 - **Trend link:** every sensor links to the LibreNMS graph for the last year, to see a battery slowly losing runtime.
 
 **Severity and freshness**
@@ -60,7 +64,8 @@ ups-stasjon-03   Stasjon C   Battery runtime  18 minutes        4 min ago
 
 - Every logged-in user can open the page and sees only the devices and device groups LibreNMS lets them see.
 - Temperatures follow each user's °C/°F preference.
-- The only data the plugin writes is each user's saved views (in the LibreNMS user preferences) and its settings.
+- Battery install dates can be set by users with the LibreNMS permission to update devices.
+- The only data the plugin writes is each user's saved views (in the LibreNMS user preferences), the battery install dates (as a device attribute) and its settings.
 
 ## Requirements
 
@@ -145,6 +150,8 @@ Open *Overview > Plugins > Plugin Admin* and choose **ups-battery**.
 | Stale after | 30 min | Rows whose sensor value is older than this get a warning icon |
 | Language | English | English or Norwegian (bokmål) |
 | Top navigation | on | Also show "UPS Battery" as a top-level item in the navigation bar |
+| Battery lifetime | 48 months | Added to the install date to get the next battery swap, see [Battery replacement](#battery-replacement) |
+| Warn before the swap | 90 days | Swaps due within this many days are yellow, overdue swaps red |
 | Suspect battery: runtime below | 10 min | See [Suspect batteries](#suspect-batteries) |
 | Suspect battery: load at most | 30 % | |
 | Suspect battery: charge at least | 95 % | |
@@ -166,6 +173,20 @@ Rules use the unit LibreNMS stores (minutes for runtime, % for load and charge, 
 
 **Matching alert rules.** The page only colours rows. Under the form the settings page lists, for the saved thresholds, the equivalent LibreNMS alert rules, for example `macros.device_up = 1 AND sensors.sensor_class = "runtime" AND sensors.sensor_current < 10`. Paste them on the *Advanced* tab under *Alerts > Alert Rules > Create rule* to get alerts that agree with the colours. The warning rule leaves out the critical range, so a sensor never triggers both.
 
+### Battery replacement
+
+The next battery swap of a UPS is worked out from, in this order:
+
+1. the **install date** entered on the UPS overview (pencil in the *Installed* column) plus the *Battery lifetime* setting,
+2. the **recommended replacement date** the UPS reports (APC, "Battery Recommended Days Remaining"),
+3. the **last replacement date** the UPS reports plus the battery lifetime (APC, "Last Battery Replacement").
+
+Without any of them the swap date is unknown and the UPS is counted under "No swap date". Enter the date when you replace a battery; leaving the prompt empty removes it. The date is stored as the LibreNMS device attribute `ups-battery.battery_installed`, so it survives plugin updates and is removed with the device.
+
+Most UPS batteries (VRLA) last three to five years; set the lifetime to what the manufacturer specifies for your batteries and site temperature.
+
+The other columns of the UPS overview come from the sensors LibreNMS has discovered: the *Status* column from the output source state ("On battery"/"On mains"), *Battery* from the battery status or replace-battery indicator plus the bad battery pack count, *Self-test* from the diagnostics result. These are known for APC and the standard UPS-MIB; for other vendors they are recognised by the sensor name. LibreNMS does not store the date of the last self-test, so only its result is shown.
+
 ### Suspect batteries
 
 A short runtime is normal at high load or while the battery is still charging. It is suspicious when the UPS is lightly loaded and fully charged, because then the battery itself is the likely cause. A battery is flagged when
@@ -178,7 +199,7 @@ Where you see it: the **Battery** column in the compare view (select runtime and
 
 ### Weekly email report
 
-Switch it on in the settings and enter one or more recipients. Every week, on the day and time you choose, LibreNMS' scheduler sends an HTML email with the number of UPSes, critical and warning counts, the UPSes with the shortest runtime (top 10, 25, 50 or 100) and the suspect batteries.
+Switch it on in the settings and enter one or more recipients. Every week, on the day and time you choose, LibreNMS' scheduler sends an HTML email with the number of UPSes, critical and warning counts, the UPSes with the shortest runtime (top 10, 25, 50 or 100), the suspect batteries and the battery swaps that are overdue or due within the warning window.
 
 - It uses the email settings of LibreNMS (*Global Settings > Alerting*) and the scheduler LibreNMS already runs every minute, so nothing needs to be added to cron.
 - It covers all devices of the selected default device type, regardless of who is logged in.
@@ -207,6 +228,8 @@ The page is backed by JSON endpoints that can also be used directly. All routes 
 | --- | --- |
 | `GET /plugin/ups-battery/report` | The report page |
 | `GET /plugin/ups-battery/options?type=` | Filter options (device types, OS, groups, metrics) as JSON |
+| `GET /plugin/ups-battery/ups?type=&os=&group=&q=&attention=1&sort=status\|hostname\|location\|runtime\|charge\|load\|temperature\|swap&dir=&limit=&format=json\|csv` | UPS overview rows and summary cards as JSON, or the rows as CSV |
+| `POST /plugin/ups-battery/battery` with `{"device_id": 12, "installed": "2025-03-01"}` | Sets the battery install date (empty `installed` removes it). Needs the permission to update devices |
 | `GET /plugin/ups-battery/data?type=&class=&os=&group=&q=&sensor=&sort=&dir=&limit=&aggregate=&format=json\|csv` | Single-metric rows as JSON or CSV |
 | `GET /plugin/ups-battery/matrix?type=&classes=runtime,load,charge&os=&group=&q=&sensor=&suspect=1&sort=&dir=&limit=&format=json\|csv` | Compare-metrics rows as JSON or CSV |
 | `GET`/`POST /plugin/ups-battery/views`, `POST .../views/delete` | Saved views of the current user |

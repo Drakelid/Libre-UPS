@@ -6,7 +6,7 @@ This repository is the LibreNMS plugin `drakelid/librenms-ups-battery`.
 
 - The full specification is [Prosjektspesifikasjon-UPS-Battery.md](Prosjektspesifikasjon-UPS-Battery.md) (Norwegian). Read all of it before writing code.
 - Chapter 12 (Implementeringsguide) is binding: file layout, class names, method signatures, API JSON shapes, CSV format and tests. Where chapter 12 conflicts with chapters 1–10, chapter 12 wins.
-- Chapters 13 and 14 describe the changes made after the first and second code review (thresholds, compare-metrics view, saved views, device card, suspect batteries, weekly email report, kiosk view, own JavaScript file, ...). They override chapters 1–12 where they disagree, and chapter 14 overrides chapter 13.
+- Chapters 13 and 14 describe the changes made after the first and second code review (thresholds, compare-metrics view, saved views, device card, suspect batteries, weekly email report, kiosk view, own JavaScript file, ...). Chapter 15 adds the UPS overview and the battery swap date. They override chapters 1–12 where they disagree, and a later chapter overrides an earlier one.
 - Chapter 11 (Beslutninger) locks every earlier open question. Do not reopen them; do not add features outside the spec.
 - If something is genuinely unspecified, choose the simplest option consistent with the spec and record it in `CHANGELOG.md` under "Known deviations".
 

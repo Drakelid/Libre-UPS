@@ -16,6 +16,8 @@
     const LIMITS = ['10', '25', '50', '100', '0'];
     const MAX_METRICS = 6;
     const SINGLE_SORTS = ['hostname', 'location', 'descr', 'value', 'lastupdate'];
+    const UPS_SORTS = ['status', 'hostname', 'location', 'runtime', 'charge', 'load', 'temperature', 'swap'];
+    const VIEWS = ['ups', 'single', 'matrix'];
     const KIOSK_REFRESH_SECONDS = 300;
     const el = (id) => document.getElementById(id);
 
@@ -39,7 +41,7 @@
         const d = cfg.defaults || {};
         const i = (cfg.initial && typeof cfg.initial === 'object') ? cfg.initial : {};
 
-        state.view = 'single';
+        state.view = VIEWS.indexOf(cfg.defaultView) !== -1 ? cfg.defaultView : 'single';
         state.type = d.type === null || d.type === undefined ? '' : String(d.type);
         state.klass = d['class'] ? String(d['class']) : 'runtime';
         state.classes = [];
@@ -48,6 +50,7 @@
         state.q = '';
         state.sensor = '';
         state.suspect = false;
+        state.attention = false;
         state.sort = '';
         state.dir = null;
         state.limit = String(d.limit === undefined ? 25 : d.limit);
@@ -62,7 +65,8 @@
         const s = (key, fallback) => (typeof q[key] === 'string' ? q[key] : fallback);
         const defaults = cfg.defaults || {};
 
-        state.view = s('view', 'single') === 'matrix' ? 'matrix' : 'single';
+        // Addresses and saved views from before the UPS overview have no view parameter: they are the single view.
+        state.view = VIEWS.indexOf(s('view', 'single')) !== -1 ? s('view', 'single') : 'single';
         state.type = s('type', defaults.type === null || defaults.type === undefined ? '' : String(defaults.type));
         state.klass = s('class', defaults['class'] ? String(defaults['class']) : 'runtime');
         state.classes = splitClasses(s('classes', ''));
@@ -71,6 +75,7 @@
         state.q = s('q', '');
         state.sensor = s('sensor', '');
         state.suspect = s('suspect', '') === '1';
+        state.attention = s('attention', '') === '1';
         state.sort = s('sort', '');
         state.dir = s('dir', '') || null;
         state.limit = s('limit', String(defaults.limit === undefined ? 25 : defaults.limit));
@@ -88,11 +93,14 @@
     function queryParams(format, forPage) {
         const p = new URLSearchParams();
         const matrix = state.view === 'matrix';
-        if (matrix) { p.set('view', 'matrix'); }
+        const ups = state.view === 'ups';
+        if (state.view !== 'single') { p.set('view', state.view); }
         p.set('type', state.type);
         if (matrix) {
             p.set('classes', state.classes.join(','));
             if (state.suspect) { p.set('suspect', '1'); }
+        } else if (ups) {
+            if (state.attention) { p.set('attention', '1'); }
         } else {
             p.set('class', state.klass);
             p.set('aggregate', state.aggregate);
@@ -100,7 +108,7 @@
         p.set('os', state.os);
         p.set('group', state.group);
         if (state.q) { p.set('q', state.q); }
-        if (state.sensor) { p.set('sensor', state.sensor); }
+        if (state.sensor && !ups) { p.set('sensor', state.sensor); }
         if (state.sort) { p.set('sort', state.sort); }
         if (state.dir) { p.set('dir', state.dir); }
         p.set('limit', state.limit);
@@ -111,14 +119,18 @@
 
     function query(format) { return queryParams(format, false).toString(); }
 
+    function endpoint() {
+        return state.view === 'ups' ? cfg.urls.ups : (state.view === 'matrix' ? cfg.urls.matrix : cfg.urls.data);
+    }
+
     function dataUrl(format) {
-        return (state.view === 'matrix' ? cfg.urls.matrix : cfg.urls.data) + '?' + query(format);
+        return endpoint() + '?' + query(format);
     }
 
     function exportAllUrl() {
         const p = queryParams('csv', false);
         p.set('limit', '0');
-        return (state.view === 'matrix' ? cfg.urls.matrix : cfg.urls.data) + '?' + p.toString();
+        return endpoint() + '?' + p.toString();
     }
 
     function updateUrl() {
@@ -217,7 +229,7 @@
             state.classes = values.slice(0, 3);
         }
 
-        const validSorts = state.view === 'matrix' ? ['hostname', 'location'].concat(state.classes) : SINGLE_SORTS;
+        const validSorts = state.view === 'ups' ? UPS_SORTS : (state.view === 'matrix' ? ['hostname', 'location'].concat(state.classes) : SINGLE_SORTS);
         if (state.sort && validSorts.indexOf(state.sort) === -1) {
             state.sort = '';
             state.dir = null;
@@ -263,10 +275,16 @@
 
     function syncControls() {
         const matrix = state.view === 'matrix';
-        el('ub-view-single').checked = !matrix;
+        const ups = state.view === 'ups';
+        el('ub-view-ups').checked = ups;
+        el('ub-view-single').checked = state.view === 'single';
         el('ub-view-matrix').checked = matrix;
-        el('ub-class-group').style.display = matrix ? 'none' : '';
-        el('ub-aggregate-group').style.display = matrix ? 'none' : '';
+        el('ub-class-group').style.display = state.view === 'single' ? '' : 'none';
+        el('ub-aggregate-group').style.display = state.view === 'single' ? '' : 'none';
+        el('ub-sensor-group').style.display = ups ? 'none' : '';
+        el('ub-attention-group').style.display = ups ? '' : 'none';
+        el('ub-attention').checked = state.attention;
+        el('ub-cards').style.display = ups ? '' : 'none';
         el('ub-classes-group').style.display = matrix ? '' : 'none';
         el('ub-hint').style.display = matrix ? '' : 'none';
         el('ub-suspect-group').style.display = matrix ? '' : 'none';
@@ -314,7 +332,8 @@
     function loadData() {
         updateUrl();
         const matrix = state.view === 'matrix';
-        if ((matrix && state.classes.length === 0) || (!matrix && state.klass === '')) {
+        const ups = state.view === 'ups';
+        if (!ups && ((matrix && state.classes.length === 0) || (!matrix && state.klass === ''))) {
             last = null;
             buildHead([{ sort: 'hostname', label: T.columns.hostname }]);
             renderEmpty(1);
@@ -329,13 +348,13 @@
         return getJson(dataUrl(), dataCtl.signal).then((body) => {
             last = body;
             showError(null);
-            if (matrix) { renderMatrix(body); } else { renderSingle(body); }
+            if (ups) { renderUps(body); } else if (matrix) { renderMatrix(body); } else { renderSingle(body); }
             updateHeaders();
             el('ub-table').style.opacity = '';
         });
     }
 
-    function effectiveSort() { return (last && last.filters && last.filters.sort) || state.sort || (state.view === 'single' ? 'value' : ''); }
+    function effectiveSort() { return (last && last.filters && last.filters.sort) || state.sort || (state.view === 'single' ? 'value' : (state.view === 'ups' ? 'status' : '')); }
     function effectiveDir() { return (last && last.filters && last.filters.dir) || state.dir || 'asc'; }
 
     function onSortClick(column) {
@@ -344,7 +363,8 @@
             state.dir = effectiveDir() === 'asc' ? 'desc' : 'asc';
         } else {
             state.sort = column;
-            const valueColumn = column === 'value' || (state.view === 'matrix' && column !== 'hostname' && column !== 'location');
+            // Value columns and every UPS overview column start in the direction the server picks (worst first).
+            const valueColumn = column === 'value' || state.view === 'ups' || (state.view === 'matrix' && column !== 'hostname' && column !== 'location');
             state.dir = valueColumn ? null : 'asc';
         }
         loadData().catch(handleFailure);
@@ -621,6 +641,273 @@
         el('ub-summary').textContent = parts.join(' · ');
     }
 
+    // ---- UPS overview ----
+
+    /** A value cell like in the compare view: severity colour, stale icon, link to the sensor and hover graph. */
+    function sensorCell(data, title) {
+        const td = document.createElement('td');
+        if (!data) {
+            td.className = 'text-muted';
+            td.textContent = '–';
+            return td;
+        }
+        td.className = severityClass(data.severity);
+        if (data.severity === 'critical' || data.severity === 'warning') { td.style.fontWeight = 'bold'; }
+        if (data.last_updated && isStale(data.last_updated)) {
+            td.appendChild(staleIcon(data.last_updated));
+            td.appendChild(document.createTextNode(' '));
+        }
+        td.appendChild(link(data.value_formatted, data.sensor_url, data.sensor_descr));
+        attachGraph(td, data.graph_url, title + ' - ' + data.sensor_descr);
+        return td;
+    }
+
+    function badge(text, kind, title) {
+        const span = document.createElement('span');
+        span.className = 'label label-' + kind;
+        span.textContent = text;
+        if (title) { span.title = title; }
+        return span;
+    }
+
+    function statusCell(r) {
+        const td = document.createElement('td');
+        if (r.on_battery === true) {
+            td.appendChild(badge(T.ups.on_battery, 'danger', r.output ? r.output.value_formatted : ''));
+        } else if (r.on_battery === false) {
+            td.appendChild(badge(T.ups.on_mains, 'success', r.output ? r.output.value_formatted : ''));
+        } else if (r.output) {
+            td.appendChild(document.createTextNode(r.output.value_formatted));
+        } else {
+            td.className = 'text-muted';
+            td.textContent = '–';
+        }
+        return td;
+    }
+
+    /** Battery status sensor, bad battery packs and the suspect battery verdict. */
+    function batteryStatusCell(r) {
+        const td = sensorCell(r.battery, r.display_name);
+        const extra = [];
+        if (r.bad_packs && r.bad_packs.value > 0) {
+            extra.push(badge(T.ups.bad_packs.replace(':n', fmt(r.bad_packs.value)), 'danger', r.bad_packs.sensor_descr));
+        }
+        if (r.suspect === true) {
+            extra.push(badge(T.suspect.yes, 'warning', T.ups.suspect));
+        }
+        if (extra.length && !r.battery) { td.textContent = ''; td.className = ''; }
+        extra.forEach((node) => { td.appendChild(document.createTextNode(' ')); td.appendChild(node); });
+        return td;
+    }
+
+    function swapText(swap) {
+        if (swap.days_left === null) { return ''; }
+        if (swap.days_left === 0) { return T.ups.due_today; }
+        if (swap.days_left < 0) { return T.ups.overdue.replace(':n', -swap.days_left); }
+        return T.ups.days_left.replace(':n', swap.days_left);
+    }
+
+    function swapSourceText(swap) {
+        const text = T.ups['source_' + swap.source] || '';
+        return text.replace(':months', last && last.lifetime_months ? last.lifetime_months : '');
+    }
+
+    function swapCell(swap) {
+        const td = document.createElement('td');
+        td.title = swapSourceText(swap);
+        if (!swap.due) {
+            td.className = 'text-muted';
+            td.textContent = '–';
+            return td;
+        }
+        td.className = severityClass(swap.severity);
+        if (swap.severity === 'critical' || swap.severity === 'warning') { td.style.fontWeight = 'bold'; }
+        td.appendChild(document.createTextNode(swap.due + ' '));
+        const small = document.createElement('small');
+        small.textContent = '(' + swapText(swap) + ')';
+        td.appendChild(small);
+        return td;
+    }
+
+    function installedCell(r, canEdit) {
+        const td = document.createElement('td');
+        const installed = r.swap.source === 'manual' || r.swap.source === 'ups_last' ? r.swap.installed : null;
+        td.appendChild(document.createTextNode(installed || '–'));
+        if (!installed) { td.className = 'text-muted'; }
+        if (canEdit) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-link btn-xs ub-edit';
+            button.title = T.ups.set_installed;
+            button.setAttribute('aria-label', T.ups.set_installed + ': ' + r.display_name);
+            const icon = document.createElement('i');
+            icon.className = 'fa fa-pencil';
+            icon.setAttribute('aria-hidden', 'true');
+            button.appendChild(icon);
+            button.addEventListener('click', () => editInstalled(r));
+            td.appendChild(button);
+        }
+        return td;
+    }
+
+    function editInstalled(r) {
+        const current = r.swap.source === 'manual' ? r.swap.installed : '';
+        const value = window.prompt(T.ups.installed_prompt + ' ' + r.display_name, current || '');
+        if (value === null) { return; }
+        postJson(cfg.urls.battery, { device_id: r.device_id, installed: value.trim() })
+            .then(() => loadData())
+            .catch(handleFailure);
+    }
+
+    /** Row below a UPS with all its sensors, grouped by sensor class. */
+    function detailsRow(r, columns) {
+        const tr = document.createElement('tr');
+        tr.className = 'ub-details';
+        const td = document.createElement('td');
+        td.colSpan = columns;
+        const list = document.createElement('dl');
+        const groups = {};
+        const order = [];
+        r.sensors.forEach((s) => {
+            if (!groups[s.label]) { groups[s.label] = []; order.push(s.label); }
+            groups[s.label].push(s);
+        });
+        order.forEach((label) => {
+            const dt = document.createElement('dt');
+            dt.textContent = label;
+            const dd = document.createElement('dd');
+            groups[label].forEach((s, index) => {
+                if (index > 0) { dd.appendChild(document.createTextNode(' · ')); }
+                const item = document.createElement('span');
+                item.className = s.severity === 'critical' ? 'text-danger' : (s.severity === 'warning' ? 'text-warning' : '');
+                item.appendChild(document.createTextNode(s.sensor_descr + ': '));
+                const value = document.createElement('strong');
+                value.appendChild(link(s.value_formatted, s.sensor_url, null));
+                item.appendChild(value);
+                attachGraph(item, s.graph_url, r.display_name + ' - ' + s.sensor_descr);
+                dd.appendChild(item);
+            });
+            list.appendChild(dt);
+            list.appendChild(dd);
+        });
+        td.appendChild(list);
+        tr.appendChild(td);
+        return tr;
+    }
+
+    function toggleButton(onClick) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-link btn-xs ub-toggle';
+        button.title = T.ups.details;
+        button.setAttribute('aria-expanded', 'false');
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-caret-right fa-fw';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+        button.addEventListener('click', () => {
+            const open = button.getAttribute('aria-expanded') !== 'true';
+            button.setAttribute('aria-expanded', open ? 'true' : 'false');
+            icon.className = (open ? 'fa fa-caret-down' : 'fa fa-caret-right') + ' fa-fw';
+            onClick(open);
+        });
+        return button;
+    }
+
+    function card(value, label, tone, node) {
+        const box = document.createElement('div');
+        box.className = 'ub-card' + (tone ? ' ub-' + tone : '');
+        const number = document.createElement('div');
+        number.className = 'ub-card-value';
+        if (node) { number.appendChild(node); } else { number.textContent = String(value); }
+        const text = document.createElement('div');
+        text.className = 'ub-card-label';
+        text.textContent = label;
+        box.appendChild(number);
+        box.appendChild(text);
+        return box;
+    }
+
+    function renderCards(body) {
+        const c = body.cards;
+        const box = el('ub-cards');
+        box.textContent = '';
+        box.appendChild(card(c.devices, T.ups.card_devices, ''));
+        box.appendChild(card(c.on_battery, T.ups.card_on_battery, c.on_battery > 0 ? 'danger' : ''));
+        box.appendChild(card(c.swap_overdue, T.ups.card_overdue, c.swap_overdue > 0 ? 'danger' : ''));
+        box.appendChild(card(c.swap_due, T.ups.card_due.replace(':days', body.warn_days), c.swap_due > 0 ? 'warn' : ''));
+        box.appendChild(card(c.battery_alarm, T.ups.card_alarm, c.battery_alarm > 0 ? 'warn' : ''));
+        box.appendChild(card(c.swap_unknown, T.ups.card_unknown, ''));
+        if (c.lowest_runtime) {
+            const lowest = card(null, T.ups.card_lowest + ': ' + c.lowest_runtime.display_name, '', link(c.lowest_runtime.value_formatted, c.lowest_runtime.device_url, c.lowest_runtime.display_name));
+            box.appendChild(lowest);
+        }
+    }
+
+    function renderUps(body) {
+        const columns = [
+            { sort: null, label: '' },
+            { sort: 'hostname', label: T.columns.hostname },
+            { sort: 'location', label: T.columns.location },
+            { sort: 'status', label: T.ups.col_status },
+            { sort: 'runtime', label: T.ups.col_runtime },
+            { sort: 'charge', label: T.ups.col_charge },
+            { sort: 'load', label: T.ups.col_load },
+            { sort: 'temperature', label: T.ups.col_temperature },
+            { sort: null, label: T.ups.col_battery },
+            { sort: null, label: T.ups.col_self_test },
+            { sort: null, label: T.ups.col_installed },
+            { sort: 'swap', label: T.ups.col_swap }
+        ];
+        buildHead(columns);
+        renderCards(body);
+
+        const tbody = el('ub-body');
+        tbody.textContent = '';
+        if (!body.rows.length) {
+            renderEmpty(columns.length);
+            tbody.firstChild.firstChild.textContent = T.ups.empty;
+        }
+
+        body.rows.forEach((r) => {
+            const tr = document.createElement('tr');
+            const classNames = [severityClass(r.severity)];
+            if (!r.device_up) { classNames.push('text-muted'); }
+            tr.className = classNames.join(' ').trim();
+
+            let details = null;
+            const toggle = document.createElement('td');
+            toggle.appendChild(toggleButton((open) => {
+                if (open) {
+                    details = detailsRow(r, columns.length);
+                    tr.parentNode.insertBefore(details, tr.nextSibling);
+                } else if (details) {
+                    details.remove();
+                    details = null;
+                }
+            }));
+            tr.appendChild(toggle);
+
+            const host = document.createElement('td');
+            host.appendChild(link(r.display_name, r.device_url, r.hostname));
+            tr.appendChild(host);
+            tr.appendChild(cell(r.location || ''));
+            tr.appendChild(statusCell(r));
+            tr.appendChild(sensorCell(r.runtime, r.display_name));
+            tr.appendChild(sensorCell(r.charge, r.display_name));
+            tr.appendChild(sensorCell(r.load, r.display_name));
+            tr.appendChild(sensorCell(r.temperature, r.display_name));
+            tr.appendChild(batteryStatusCell(r));
+            tr.appendChild(sensorCell(r.self_test, r.display_name));
+            tr.appendChild(installedCell(r, body.can_edit === true));
+            tr.appendChild(swapCell(r.swap));
+
+            tbody.appendChild(tr);
+        });
+
+        el('ub-summary').textContent = T.summary.showing.replace(':shown', body.rows.length).replace(':total', body.total);
+    }
+
     // ---- hover graph ----
 
     function moveGraph(e) {
@@ -765,6 +1052,7 @@
             syncControls();
             loadData().catch(handleFailure);
         };
+        el('ub-view-ups').addEventListener('change', () => onViewMode('ups'));
         el('ub-view-single').addEventListener('change', () => onViewMode('single'));
         el('ub-view-matrix').addEventListener('change', () => onViewMode('matrix'));
 
@@ -785,6 +1073,7 @@
         el('ub-aggregate').addEventListener('change', (e) => { state.aggregate = e.target.value; loadData().catch(handleFailure); });
         el('ub-limit').addEventListener('change', (e) => { state.limit = e.target.value; loadData().catch(handleFailure); });
         el('ub-suspect').addEventListener('change', (e) => { state.suspect = e.target.checked; loadData().catch(handleFailure); });
+        el('ub-attention').addEventListener('change', (e) => { state.attention = e.target.checked; loadData().catch(handleFailure); });
 
         const onText = (id, key) => {
             el(id).addEventListener('input', (e) => {

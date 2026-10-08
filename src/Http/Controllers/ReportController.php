@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drakelid\UpsBattery\Http\Controllers;
 
+use App\Models\Device;
 use App\Models\User;
 use App\Models\UserPref;
 use Drakelid\UpsBattery\Report\CsvFormatter;
@@ -16,6 +17,8 @@ use Drakelid\UpsBattery\Report\SavedViews;
 use Drakelid\UpsBattery\Report\SensorReportService;
 use Drakelid\UpsBattery\Report\Summary;
 use Drakelid\UpsBattery\Report\TooManyRowsException;
+use Drakelid\UpsBattery\Report\UpsFilters;
+use Drakelid\UpsBattery\Report\UpsRow;
 use Drakelid\UpsBattery\Report\Urls;
 use Drakelid\UpsBattery\UpsBatteryProvider;
 use Illuminate\Contracts\View\View;
@@ -46,6 +49,7 @@ class ReportController extends Controller
             'refreshSeconds' => $settings->refreshSeconds,
             'staleMinutes' => $settings->staleMinutes,
             'matrixDefaults' => MatrixFilters::DEFAULT_CLASSES,
+            'defaultView' => 'ups',
             'scriptUrl' => Urls::relative(route('ups-battery.script')).'?v='.(@filemtime(self::SCRIPT_PATH) ?: 1),
         ]);
     }
@@ -152,6 +156,75 @@ class ReportController extends Controller
             'total' => $result['total'],
             'rows' => array_map(fn (MatrixRow $row): array => $row->toArray($filters->classes), $result['rows']),
         ]);
+    }
+
+    /** UPS overview: one row per UPS with battery, power and swap data, and the summary cards. */
+    public function ups(Request $request): JsonResponse|StreamedResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $format = $request->query('format', 'json');
+        if (! in_array($format, ['json', 'csv'], true)) {
+            return $this->error('Invalid format.');
+        }
+
+        try {
+            $settings = $this->settings();
+            $filters = UpsFilters::fromArray($request->query(), $settings->filterDefaults());
+            $options = $this->service->options($user, $filters->type);
+            $this->validateAgainstOptions($options, $filters->type, $filters->os, $filters->group, []);
+
+            $result = $this->service->ups($user, $filters, $settings);
+        } catch (InvalidArgumentException|TooManyRowsException $e) {
+            return $this->error($e->getMessage());
+        }
+
+        if ($format === 'csv') {
+            return $this->download((new CsvFormatter)->upsToCsv($result['rows']), sprintf('ups-battery-overview-%s.csv', date('Ymd-Hi')));
+        }
+
+        $label = fn (string $class): string => $this->service->classLabel($class);
+
+        return response()->json([
+            'filters' => $filters->toArray(),
+            'total' => $result['total'],
+            'cards' => $result['cards'],
+            'warn_days' => $settings->swapWarnDays,
+            'lifetime_months' => $settings->batteryLifetimeMonths,
+            'can_edit' => $this->canEditBattery($user),
+            'rows' => array_map(fn (UpsRow $row): array => $row->toArray($label), $result['rows']),
+        ]);
+    }
+
+    /** Sets or clears the battery install date of a UPS. Needs the LibreNMS permission to update devices. */
+    public function saveBattery(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (! $this->canEditBattery($user)) {
+            return response()->json(['message' => 'You may not change devices.'], 403);
+        }
+
+        try {
+            $deviceId = filter_var($request->input('device_id'), FILTER_VALIDATE_INT);
+            if ($deviceId === false || $deviceId < 1) {
+                throw new InvalidArgumentException('Invalid device.');
+            }
+
+            $date = InputParser::parseInstallDate($request->input('installed'), now()->toImmutable());
+            $this->service->setBatteryInstalled($user, $deviceId, $date);
+        } catch (InvalidArgumentException $e) {
+            return $this->error($e->getMessage());
+        }
+
+        return response()->json(['device_id' => $deviceId, 'installed' => $date]);
+    }
+
+    private function canEditBattery(User $user): bool
+    {
+        return $user->can('update', Device::class);
     }
 
     public function views(Request $request): JsonResponse

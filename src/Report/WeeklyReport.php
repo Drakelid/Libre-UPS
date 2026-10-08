@@ -53,8 +53,10 @@ final class WeeklyReport
      * @param  array{devices: int, critical: int, warning: int, suspect: int}  $counts
      * @param  ReportRow[]  $shortest  Rows for the "shortest runtime" table, shortest first.
      * @param  MatrixRow[]  $suspect  Devices with a suspect battery; cells hold runtime, load and charge.
+     * @param  UpsRow[]|null  $swaps  UPSs whose battery swap is overdue or due within $warnDays, soonest first;
+     *                                null leaves the section out.
      */
-    public static function html(array $t, string $origin, string $reportUrl, string $generated, array $counts, array $shortest, array $suspect): string
+    public static function html(array $t, string $origin, string $reportUrl, string $generated, array $counts, array $shortest, array $suspect, ?array $swaps = null, int $warnDays = BatterySwap::DEFAULT_WARN_DAYS): string
     {
         $summary = implode(' &middot; ', [
             self::e(strtr($t['summary_devices'], [':count' => (string) $counts['devices']])),
@@ -71,6 +73,12 @@ final class WeeklyReport
         $html .= '<h3 style="margin:16px 0 4px">'.self::e($t['suspect_title']).'</h3>';
         $html .= '<p style="margin:0 0 8px;color:#666">'.self::e($t['suspect_help']).'</p>';
         $html .= self::suspectTable($t, $origin, $suspect);
+
+        if ($swaps !== null) {
+            $html .= '<h3 style="margin:16px 0 4px">'.self::e($t['swap_title']).'</h3>';
+            $html .= '<p style="margin:0 0 8px;color:#666">'.self::e(strtr($t['swap_help'], [':days' => (string) $warnDays])).'</p>';
+            $html .= self::swapTable($t, $origin, $swaps);
+        }
 
         $html .= '<h3 style="margin:16px 0 8px">'.self::e($t['shortest_title']).'</h3>';
         $html .= self::shortestTable($t, $origin, $shortest);
@@ -127,6 +135,43 @@ final class WeeklyReport
         }
 
         return $html.'</table>';
+    }
+
+    /**
+     * @param  array<string, string>  $t
+     * @param  UpsRow[]  $rows
+     */
+    private static function swapTable(array $t, string $origin, array $rows): string
+    {
+        if ($rows === []) {
+            return '<p>'.self::e($t['none']).'</p>';
+        }
+
+        $html = self::tableStart([$t['col_host'], $t['col_location'], $t['col_swap_due'], $t['col_days_left']]);
+        foreach ($rows as $row) {
+            $html .= '<tr'.(self::ROW_STYLE[$row->swap->severity->value] ?? '').'>'
+                .self::cell(self::link($origin, $row->deviceUrl, $row->displayName, $row->hostname))
+                .self::cell(self::e($row->location ?? ''))
+                .self::cell(self::e($row->swap->due ?? ''))
+                .self::cell(self::e($row->swap->daysLeft === null ? '' : (string) $row->swap->daysLeft))
+                .'</tr>';
+        }
+
+        return $html.'</table>';
+    }
+
+    /**
+     * UPSs whose battery swap is overdue or due within $warnDays days, soonest first.
+     *
+     * @param  UpsRow[]  $rows
+     * @return UpsRow[]
+     */
+    public static function swapsDue(array $rows, int $warnDays): array
+    {
+        $due = array_values(array_filter($rows, fn (UpsRow $row): bool => $row->swap->daysLeft !== null && $row->swap->daysLeft <= $warnDays));
+        usort($due, fn (UpsRow $a, UpsRow $b): int => [$a->swap->daysLeft, $a->hostname] <=> [$b->swap->daysLeft, $b->hostname]);
+
+        return $due;
     }
 
     /** @param  string[]  $headings */

@@ -46,6 +46,7 @@ class DeviceOverview extends DeviceOverviewHook
             'staleMinutes' => $pluginSettings->staleMinutes,
             'rows' => $rows,
             'suspect' => SuspectBattery::evaluateRows($pluginSettings->suspectRule, $rows),
+            'swap' => $service->deviceSwap($device, $pluginSettings),
         ];
     }
 }

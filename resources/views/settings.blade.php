@@ -90,6 +90,21 @@
             </div>
         </div>
 
+        <h4>{{ $t('swap_title') }}</h4>
+        <p class="text-muted">{{ $t('swap_help') }}</p>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-lifetime">{{ $t('battery_lifetime_months') }}</label>
+            <div class="col-sm-2">
+                <input type="number" class="form-control" id="ub-lifetime" name="settings[battery_lifetime_months]" value="{{ $current->batteryLifetimeMonths }}" min="6" max="240">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-swap-warn">{{ $t('swap_warn_days') }}</label>
+            <div class="col-sm-2">
+                <input type="number" class="form-control" id="ub-swap-warn" name="settings[swap_warn_days]" value="{{ $current->swapWarnDays }}" min="0" max="730">
+            </div>
+        </div>
+
         <h4>{{ $t('suspect_title') }}</h4>
         <p class="text-muted">{{ $t('suspect_help') }}</p>
         <div class="form-group">

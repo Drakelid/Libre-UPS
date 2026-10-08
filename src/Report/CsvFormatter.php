@@ -112,6 +112,57 @@ final class CsvFormatter
         return $out;
     }
 
+    /** @return string[] */
+    public function upsHeader(): array
+    {
+        return [
+            'hostname', 'display_name', 'location', 'os', 'status', 'on_battery',
+            'runtime', 'charge', 'load', 'temperature', 'battery_status', 'bad_battery_packs', 'self_test', 'suspect_battery',
+            'battery_installed', 'swap_due', 'swap_days_left', 'swap_source',
+        ];
+    }
+
+    /** @return string[] */
+    public function upsLine(UpsRow $row): array
+    {
+        $number = fn (?ReportRow $cell): string => $cell === null || $cell->value === null ? '' : $this->formatNumber($cell->value);
+        $text = fn (?ReportRow $cell): string => $cell === null ? '' : $this->guard($cell->valueFormatted);
+        $flag = fn (?bool $value): string => $value === null ? '' : ($value ? 'yes' : 'no');
+
+        return [
+            $this->guard($row->hostname),
+            $this->guard($row->displayName),
+            $this->guard($row->location ?? ''),
+            $this->guard($row->os),
+            $row->severity->value,
+            $flag($row->onBattery),
+            $number($row->runtime),
+            $number($row->charge),
+            $number($row->load),
+            $number($row->temperature),
+            $text($row->battery),
+            $number($row->badPacks),
+            $text($row->selfTest),
+            $flag($row->suspect),
+            $row->swap->installed ?? '',
+            $row->swap->due ?? '',
+            $row->swap->daysLeft === null ? '' : (string) $row->swap->daysLeft,
+            $row->swap->source,
+        ];
+    }
+
+    /** @param  UpsRow[]  $rows */
+    public function upsToCsv(array $rows): string
+    {
+        $out = self::BOM.$this->encode($this->upsHeader());
+
+        foreach ($rows as $row) {
+            $out .= $this->encode($this->upsLine($row));
+        }
+
+        return $out;
+    }
+
     /** @param  string[]  $cells */
     private function encode(array $cells): string
     {

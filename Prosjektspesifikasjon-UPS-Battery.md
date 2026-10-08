@@ -727,3 +727,46 @@ Dette kapittelet gjelder foran kapittel 1–13 der de er uenige. Det beskriver r
 - [ ] «Export all rows» gir alle rader uavhengig av «Show»-valget.
 - [ ] Trendikonet åpner LibreNMS sin grafside for riktig sensor.
 - [ ] En bruker med °F ser samme alvorlighetsfarge som en bruker med °C for samme terskelregel på temperatur.
+
+## 15. UPS-oversikt og batteribytte
+
+Etter ønske om mer UPS-data på siden, slik at det er lett å se hvor lenge det er til neste batteribytte. Dette kapitlet går foran kapittel 1–14 der de er uenige.
+
+### 15.1 UPS-oversikten
+
+- Ny visning `view=ups`, standardvisning når siden åpnes uten parametre. Adresser og lagrede visninger uten `view` åpner fortsatt «Single metric».
+- Endepunkt `GET plugin/ups-battery/ups` (JSON og CSV) med filtrene `type`, `os`, `group`, `q`, `attention`, `sort` (`status`, `hostname`, `location`, `runtime`, `charge`, `load`, `temperature`, `swap`), `dir` og `limit`. Standard er `status` synkende (verst først, deretter nærmeste bytte).
+- En UPS er en enhet med minst én runtime- eller charge-sensor. Én rad per UPS: status (på batteri / på nett fra utgangsstatus), runtime (lavest), charge (lavest), load (høyest), temperatur (høyest), batteristatus (verste tilstandssensor), defekte batteripakker, mistenkelig batteri (kapittel 14), siste selvtestresultat, monteringsdato og neste batteribytte. Alle øvrige sensorer vises i en rad som kan åpnes under UPS-en.
+- Oppsummeringskort over alle UPS-er som passer filtrene: antall, på batteri, bytte på overtid, bytte innen varselvinduet, uten byttedato, batteriproblemer og lavest runtime.
+- «Needs attention only» (`attention=1`) viser bare UPS-er med varsel eller kritisk verdi.
+- Samlet alvorlighet: verste av cellene og byttet; «unknown» teller ikke, mistenkelig batteri gir minst varsel, på batteri gir kritisk.
+
+### 15.2 Klassifisering av sensorer (ren PHP: `UpsSensorKind`)
+
+- APC lagrer «Battery Recommended Days Remaining» og «Last Battery Replacement» som runtime-sensorer (`sensor_index` begynner med `upsAdvBatteryRecommendedReplaceDate` / `upsBasicBatteryLastReplaceDate`, verdi i minutter fra nå). De utelates fra alle runtime-rapporter og brukes kun til batteribytte.
+- Tilstandssensorer etter `sensor_type`: batteristatus `upsAdvBatteryReplaceIndicator`, `upsBatteryStatusState`; utgangsstatus `upsBasicOutputStatus`, `upsOutputSourceState`; selvtest `upsAdvTestDiagnosticsResults`, `upsTestResult`. Andre leverandører gjenkjennes på navnet.
+- En mislykket APC-selvtest (LibreNMS: «unknown») og defekte batteripakker over null regnes som kritisk.
+
+### 15.3 Neste batteribytte (ren PHP: `BatterySwap`)
+
+1. Monteringsdato registrert i UPS-oversikten + batterilevetid (innstilling, standard 48 måneder) – kilde `manual`.
+2. Anbefalt byttedato fra UPS-en – kilde `ups`.
+3. Siste byttedato fra UPS-en + batterilevetid – kilde `ups_last`.
+4. Ellers ukjent – kilde `none`.
+
+Dager igjen ≤ 0 er kritisk, ≤ varselvinduet (innstilling, standard 90 dager) er varsel. Monteringsdatoen lagres som enhetsattributtet `ups-battery.battery_installed` (Y-m-d) via `POST plugin/ups-battery/battery` og kan settes av brukere med LibreNMS-tillatelsen til å oppdatere enheter. Datoen kan ikke ligge i fremtiden eller før 1990.
+
+### 15.4 Øvrig
+
+- Enhetskortet viser neste batteribytte. Ukerapporten får tabellen «Battery swaps due».
+- Lenker på enhetskortet gjøres absolutte (LibreNMS-sidene har `<base href>`).
+- Datoen for siste selvtest vises ikke; LibreNMS lagrer den ikke som sensor.
+
+### 15.5 Tilleggskriterier for akseptanse
+
+- [ ] Siden åpner i UPS-oversikten og viser én rad per UPS med kort over tabellen.
+- [ ] En APC-UPS viser byttedatoen UPS-en rapporterer, og «Last Battery Replacement» vises ikke lenger som runtime i «Single metric».
+- [ ] Monteringsdato satt med blyanten gir byttedato = dato + levetid; tomt felt fjerner den.
+- [ ] En bruker uten tillatelse til å oppdatere enheter ser ikke blyanten og får 403 fra endepunktet.
+- [ ] En UPS på batteri er rød og telles i kortet «On battery».
+- [ ] Raden åpnes og viser inn-/utgangsspenning, frekvens o.l. gruppert per sensorklasse.

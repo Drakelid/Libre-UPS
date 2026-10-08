@@ -26,6 +26,8 @@ final readonly class PluginSettings
         public SuspectRule $suspectRule,
         public ReportSchedule $report,
         public bool $topNav = true,
+        public int $batteryLifetimeMonths = BatterySwap::DEFAULT_LIFETIME_MONTHS,
+        public int $swapWarnDays = BatterySwap::DEFAULT_WARN_DAYS,
     ) {}
 
     /** @param  array<string, mixed>  $raw  The settings array stored by LibreNMS (may be empty or contain bad values). */
@@ -67,6 +69,8 @@ final readonly class PluginSettings
             ),
             ReportSchedule::fromArray($raw),
             ! in_array($raw['top_nav'] ?? '1', ['0', 0, false], true),
+            self::boundedInt($raw['battery_lifetime_months'] ?? null, 6, 240, BatterySwap::DEFAULT_LIFETIME_MONTHS),
+            self::boundedInt($raw['swap_warn_days'] ?? null, 0, 730, BatterySwap::DEFAULT_WARN_DAYS),
         );
     }
 
