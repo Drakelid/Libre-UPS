@@ -7,8 +7,6 @@ namespace Drakelid\UpsBattery\Report;
 /** Validated plugin settings. Invalid or missing values fall back to safe defaults instead of breaking the page. */
 final readonly class PluginSettings
 {
-    public const DEFAULT_TYPE = 'power';
-
     public const DEFAULT_CLASS = 'runtime';
 
     public const DEFAULT_REFRESH_SECONDS = 300;
@@ -27,16 +25,15 @@ final readonly class PluginSettings
         public string $language,
         public SuspectRule $suspectRule,
         public ReportSchedule $report,
+        public bool $topNav = true,
     ) {}
 
     /** @param  array<string, mixed>  $raw  The settings array stored by LibreNMS (may be empty or contain bad values). */
     public static function fromArray(array $raw): self
     {
-        // An empty form field is stored as null, which means "all device types".
-        // Only fall back to the default type when the setting was never saved.
-        $type = array_key_exists('default_type', $raw)
-            ? self::identifierOrDefault($raw['default_type'])
-            : self::DEFAULT_TYPE;
+        // No device type (null) means all device types. UPSs are not always typed "power" in LibreNMS
+        // (a UPS behind a NUT server, for example), so the report does not narrow the type by default.
+        $type = self::identifierOrNull($raw['default_type'] ?? null);
 
         $class = is_scalar($raw['default_class'] ?? null) ? strtolower(trim((string) $raw['default_class'])) : '';
         if (preg_match('/^[a-z0-9_]{1,64}$/', $class) !== 1) {
@@ -69,6 +66,7 @@ final readonly class PluginSettings
                 self::boundedFloat($raw['suspect_min_charge'] ?? null, 0, 100, SuspectRule::DEFAULT_MIN_CHARGE),
             ),
             ReportSchedule::fromArray($raw),
+            ! in_array($raw['top_nav'] ?? '1', ['0', 0, false], true),
         );
     }
 
@@ -78,22 +76,15 @@ final readonly class PluginSettings
         return ['type' => $this->defaultType, 'class' => $this->defaultClass, 'limit' => $this->defaultLimit];
     }
 
-    private static function identifierOrDefault(mixed $value): ?string
+    private static function identifierOrNull(mixed $value): ?string
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
         if (! is_scalar($value)) {
-            return self::DEFAULT_TYPE;
+            return null;
         }
 
         $value = trim((string) $value);
-        if ($value === '') {
-            return null;
-        }
 
-        return preg_match('/^[A-Za-z0-9_.\-]{1,64}$/', $value) === 1 ? $value : self::DEFAULT_TYPE;
+        return preg_match('/^[A-Za-z0-9_.\-]{1,64}$/', $value) === 1 ? $value : null;
     }
 
     /** 0 turns auto-refresh off; other values are kept between 30 seconds and one hour. */

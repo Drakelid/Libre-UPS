@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The report no longer filters on device type `power` by default. UPSs that LibreNMS types otherwise (for example a UPS behind a NUT server on a Linux host) did not show up; when the type `power` existed but had no runtime sensors, the page fell back to another metric. The default is now all device types, and an invalid saved type also means all types. An explicitly saved *Default device type* is still used.
+
+### Added
+
+- **Top navigation entry:** "UPS Battery" is shown as a top-level item in the LibreNMS navigation bar (setting *Top navigation*, on by default), in addition to *Overview > Plugins*.
+
+### Known deviations from the specification
+
+- LibreNMS renders plugin menu hooks only inside *Overview > Plugins* and has no hook for the navigation bar. The top-level entry is therefore added by a small script in the menu hook view that copies the link into `#navHeaderCollapse > ul.navbar-nav`. If a LibreNMS update changes that markup, the entry silently disappears and the *Plugins* entry remains.
+- The default device type is now "all types" instead of `power` (specification chapter 11).
+
 ## [1.1.0] - 2026-10-08
 
 ### Fixed

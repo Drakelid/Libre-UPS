@@ -80,6 +80,15 @@
                 </select>
             </div>
         </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-top-nav-setting">{{ $t('top_nav') }}</label>
+            <div class="col-sm-5">
+                <select class="form-control" id="ub-top-nav-setting" name="settings[top_nav]">
+                    <option value="1" @selected($current->topNav)>{{ $t('top_nav_on') }}</option>
+                    <option value="0" @selected(! $current->topNav)>{{ $t('top_nav_off') }}</option>
+                </select>
+            </div>
+        </div>
 
         <h4>{{ $t('suspect_title') }}</h4>
         <p class="text-muted">{{ $t('suspect_help') }}</p>

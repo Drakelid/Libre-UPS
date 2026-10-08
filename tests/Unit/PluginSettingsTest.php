@@ -7,7 +7,8 @@ use Drakelid\UpsBattery\Report\PluginSettings;
 it('uses safe defaults when nothing has been saved', function (): void {
     $s = PluginSettings::fromArray([]);
 
-    expect($s->defaultType)->toBe('power')
+    expect($s->defaultType)->toBeNull()
+        ->and($s->topNav)->toBeTrue()
         ->and($s->defaultClass)->toBe('runtime')
         ->and($s->defaultLimit)->toBe(25)
         ->and($s->refreshSeconds)->toBe(300)
@@ -20,10 +21,17 @@ it('keeps an emptied device type as "all types"', function (mixed $saved): void 
     expect(PluginSettings::fromArray(['default_type' => $saved])->defaultType)->toBeNull();
 })->with([null, '', '   ']);
 
-it('falls back to the default type for an invalid device type', function (): void {
-    expect(PluginSettings::fromArray(['default_type' => 'bad type!'])->defaultType)->toBe('power')
-        ->and(PluginSettings::fromArray(['default_type' => ['x']])->defaultType)->toBe('power')
-        ->and(PluginSettings::fromArray(['default_type' => 'network'])->defaultType)->toBe('network');
+it('falls back to all device types for an invalid device type', function (): void {
+    expect(PluginSettings::fromArray(['default_type' => 'bad type!'])->defaultType)->toBeNull()
+        ->and(PluginSettings::fromArray(['default_type' => ['x']])->defaultType)->toBeNull()
+        ->and(PluginSettings::fromArray(['default_type' => ' power '])->defaultType)->toBe('power');
+});
+
+it('shows the top navigation entry unless it is turned off', function (): void {
+    expect(PluginSettings::fromArray(['top_nav' => '0'])->topNav)->toBeFalse()
+        ->and(PluginSettings::fromArray(['top_nav' => 0])->topNav)->toBeFalse()
+        ->and(PluginSettings::fromArray(['top_nav' => '1'])->topNav)->toBeTrue()
+        ->and(PluginSettings::fromArray(['top_nav' => null])->topNav)->toBeTrue();
 });
 
 it('normalises and validates the default class', function (): void {

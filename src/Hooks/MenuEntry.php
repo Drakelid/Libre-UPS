@@ -20,6 +20,8 @@ class MenuEntry implements MenuEntryHook
      */
     public function handle(string $pluginName, array $settings): array
     {
-        return ["$pluginName::menu", ['locale' => PluginSettings::fromArray($settings)->language]];
+        $current = PluginSettings::fromArray($settings);
+
+        return ["$pluginName::menu", ['locale' => $current->language, 'topNav' => $current->topNav]];
     }
 }

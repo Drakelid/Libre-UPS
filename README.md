@@ -102,7 +102,7 @@ sudo -u librenms ./lnms plugin:add drakelid/librenms-ups-battery            # la
 sudo -u librenms ./lnms plugin:add drakelid/librenms-ups-battery dev-main   # if no release has been tagged yet
 ```
 
-Then open *Overview > Plugins > UPS Battery*. The plugin is enabled as soon as it is installed; disable and configure it under *Overview > Plugins > Plugin Admin*.
+Then open **UPS Battery** in the top navigation bar (or *Overview > Plugins > UPS Battery*). The plugin is enabled as soon as it is installed; disable and configure it under *Overview > Plugins > Plugin Admin*.
 
 ### Update and remove
 
@@ -137,13 +137,14 @@ Open *Overview > Plugins > Plugin Admin* and choose **ups-battery**.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Default device type | `power` | Value of `devices.type` selected when the page opens. Empty means all types |
+| Default device type | empty (all types) | Value of `devices.type` selected when the page opens, for example `power`. UPSs are not always typed `power`, so leave it empty unless you need it |
 | Default metric | `runtime` | Sensor class shown when the page opens |
 | Default number of rows | 25 | One of 10, 25, 50, 100 or all |
 | Thresholds | empty | Severity rules per metric, see below |
 | Auto-refresh interval | 300 s | `0` turns it off, otherwise 30 to 3600 seconds |
 | Stale after | 30 min | Rows whose sensor value is older than this get a warning icon |
 | Language | English | English or Norwegian (bokmål) |
+| Top navigation | on | Also show "UPS Battery" as a top-level item in the navigation bar |
 | Suspect battery: runtime below | 10 min | See [Suspect batteries](#suspect-batteries) |
 | Suspect battery: load at most | 30 % | |
 | Suspect battery: charge at least | 95 % | |
