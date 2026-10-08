@@ -44,10 +44,27 @@
     #ups-battery .ub-card-label { font-size: .9em; opacity: .8; }
     #ups-battery .ub-card.ub-danger { border-color: #d9534f; color: #d9534f; }
     #ups-battery .ub-card.ub-warn { border-color: #f0ad4e; color: #c77c0e; }
-    #ups-battery .ub-details td { background: rgba(127, 127, 127, .06); }
-    #ups-battery .ub-details dl { margin: 4px 0; }
-    #ups-battery .ub-details dt { float: left; clear: left; width: 140px; font-weight: bold; }
-    #ups-battery .ub-details dd { margin-left: 150px; }
+    #ups-battery .ub-details > td { background: rgba(127, 127, 127, .06); padding: 10px 12px; }
+    #ups-battery .ub-details ul { list-style: none; margin: 0; padding: 0; }
+    #ups-battery .ub-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    #ups-battery .ub-group { border: 1px solid rgba(127, 127, 127, .3); border-radius: 4px; padding: 6px 10px; min-width: 0; }
+    #ups-battery .ub-group h5 { margin: 0 0 4px; font-weight: bold; }
+    #ups-battery .ub-group h5 small { font-weight: normal; }
+    #ups-battery .ub-item { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; border-bottom: 1px dotted rgba(127, 127, 127, .25); }
+    #ups-battery .ub-item:last-child { border-bottom: 0; }
+    #ups-battery .ub-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+    #ups-battery .ub-item-value { font-weight: bold; white-space: nowrap; }
+    #ups-battery .ub-item-warning { color: #c77c0e; }
+    #ups-battery .ub-item-critical { color: #d9534f; }
+    #ups-battery .ub-item-warning .ub-item-name, #ups-battery .ub-item-critical .ub-item-name { opacity: 1; }
+    #ups-battery .ub-item-group { opacity: .7; margin-right: 6px; white-space: nowrap; }
+    #ups-battery .ub-problems { border: 1px solid #d9534f; border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; max-width: 640px; }
+    #ups-battery .ub-problems .ub-item-name { flex: 1; }
+    #ups-battery .ub-more { padding: 0; margin-top: 2px; }
+    #ups-battery tr[class*="ub-sev-"] > td:first-child { border-left: 4px solid transparent; }
+    #ups-battery tr.ub-sev-critical > td:first-child { border-left-color: #d9534f; }
+    #ups-battery tr.ub-sev-warning > td:first-child { border-left-color: #f0ad4e; }
+    #ups-battery tr.ub-sev-ok > td:first-child { border-left-color: #5cb85c; }
     #ups-battery .ub-toggle, #ups-battery .ub-edit { padding: 0 4px; }
     #ups-battery.ub-kiosk .ub-card-value { font-size: 2.6em; }
     #ups-battery .ub-card-button { cursor: pointer; }

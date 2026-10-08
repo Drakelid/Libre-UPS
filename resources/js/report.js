@@ -812,38 +812,108 @@
             .catch(handleFailure);
     }
 
-    /** Row below a UPS with all its sensors, grouped by sensor class. */
+    /** Order of the sensor groups in the details: the battery and power values first, plain counters last. */
+    const DETAIL_ORDER = ['runtime', 'charge', 'load', 'voltage', 'current', 'power', 'frequency', 'temperature', 'state', 'count'];
+    const DETAIL_SHOWN = 6;
+
+    function isProblem(s) { return s.severity === 'critical' || s.severity === 'warning'; }
+
+    function severityRank(severity) { return { critical: 3, warning: 2, unknown: 1 }[severity] || 0; }
+
+    /** One "name ... value" line in the details. */
+    function detailItem(r, s) {
+        const li = document.createElement('li');
+        li.className = 'ub-item' + (isProblem(s) ? ' ub-item-' + s.severity : '');
+        const name = document.createElement('span');
+        name.className = 'ub-item-name';
+        name.textContent = s.sensor_descr;
+        name.title = s.sensor_descr;
+        const value = document.createElement('span');
+        value.className = 'ub-item-value';
+        value.appendChild(link(s.value_formatted, s.sensor_url, null));
+        li.appendChild(name);
+        li.appendChild(value);
+        attachGraph(li, s.graph_url, r.display_name + ' - ' + s.sensor_descr);
+        return li;
+    }
+
+    /**
+     * Row below a UPS with all its sensors: the sensors with a problem on top, then one card per sensor class.
+     * Within a card problems come first; long lists show the first few with "show more".
+     */
     function detailsRow(r, columns) {
         const tr = document.createElement('tr');
         tr.className = 'ub-details';
         const td = document.createElement('td');
         td.colSpan = columns;
-        const list = document.createElement('dl');
-        const groups = {};
-        const order = [];
-        r.sensors.forEach((s) => {
-            if (!groups[s.label]) { groups[s.label] = []; order.push(s.label); }
-            groups[s.label].push(s);
-        });
-        order.forEach((label) => {
-            const dt = document.createElement('dt');
-            dt.textContent = label;
-            const dd = document.createElement('dd');
-            groups[label].forEach((s, index) => {
-                if (index > 0) { dd.appendChild(document.createTextNode(' · ')); }
-                const item = document.createElement('span');
-                item.className = s.severity === 'critical' ? 'text-danger' : (s.severity === 'warning' ? 'text-warning' : '');
-                item.appendChild(document.createTextNode(s.sensor_descr + ': '));
-                const value = document.createElement('strong');
-                value.appendChild(link(s.value_formatted, s.sensor_url, null));
-                item.appendChild(value);
-                attachGraph(item, s.graph_url, r.display_name + ' - ' + s.sensor_descr);
-                dd.appendChild(item);
+
+        const problems = r.sensors.filter(isProblem).sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+        if (problems.length) {
+            const strip = document.createElement('div');
+            strip.className = 'ub-problems';
+            const title = document.createElement('strong');
+            title.textContent = T.ups.problems + ' (' + problems.length + ')';
+            strip.appendChild(title);
+            const list = document.createElement('ul');
+            problems.forEach((s) => {
+                const item = detailItem(r, s);
+                const group = document.createElement('small');
+                group.className = 'ub-item-group';
+                group.textContent = s.label;
+                item.insertBefore(group, item.firstChild);
+                list.appendChild(item);
             });
-            list.appendChild(dt);
-            list.appendChild(dd);
+            strip.appendChild(list);
+            td.appendChild(strip);
+        }
+
+        const groups = {};
+        r.sensors.forEach((s) => {
+            if (!groups[s['class']]) { groups[s['class']] = { label: s.label, sensors: [] }; }
+            groups[s['class']].sensors.push(s);
         });
-        td.appendChild(list);
+        const rank = (cls) => { const i = DETAIL_ORDER.indexOf(cls); return i === -1 ? DETAIL_ORDER.length : i; };
+        const classes = Object.keys(groups).sort((a, b) => rank(a) - rank(b) || groups[a].label.localeCompare(groups[b].label));
+
+        const grid = document.createElement('div');
+        grid.className = 'ub-detail-grid';
+        classes.forEach((cls) => {
+            const group = groups[cls];
+            const sensors = group.sensors.slice().sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+            const box = document.createElement('section');
+            box.className = 'ub-group';
+            const heading = document.createElement('h5');
+            heading.textContent = group.label + ' ';
+            const count = document.createElement('small');
+            count.textContent = '(' + sensors.length + ')';
+            heading.appendChild(count);
+            box.appendChild(heading);
+
+            const list = document.createElement('ul');
+            sensors.forEach((s, index) => {
+                const item = detailItem(r, s);
+                if (index >= DETAIL_SHOWN) { item.classList.add('ub-hidden'); item.style.display = 'none'; }
+                list.appendChild(item);
+            });
+            box.appendChild(list);
+
+            if (sensors.length > DETAIL_SHOWN) {
+                const more = document.createElement('button');
+                more.type = 'button';
+                more.className = 'btn btn-link btn-xs ub-more';
+                const label = T.ups.more_sensors.replace(':n', sensors.length - DETAIL_SHOWN);
+                more.textContent = label;
+                more.addEventListener('click', () => {
+                    const open = more.getAttribute('aria-expanded') !== 'true';
+                    more.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    list.querySelectorAll('.ub-hidden').forEach((li) => { li.style.display = open ? '' : 'none'; });
+                    more.textContent = open ? T.ups.less_sensors : label;
+                });
+                box.appendChild(more);
+            }
+            grid.appendChild(box);
+        });
+        td.appendChild(grid);
         tr.appendChild(td);
         return tr;
     }
@@ -987,9 +1057,10 @@
 
         body.rows.forEach((r) => {
             const tr = document.createElement('tr');
-            const classNames = [severityClass(r.severity)];
+            // A coloured stripe instead of a coloured row: the cells with the problem keep their colour and stay readable.
+            const classNames = ['ub-sev-' + r.severity];
             if (!r.device_up) { classNames.push('text-muted'); }
-            tr.className = classNames.join(' ').trim();
+            tr.className = classNames.join(' ');
 
             let details = null;
             const toggle = document.createElement('td');

@@ -490,7 +490,9 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     const cells = (tr) => [...tr.children];
 
     assert.equal(page.rows().length, 2);
-    assert.ok(first.classList.contains('danger'));
+    assert.ok(first.classList.contains('ub-sev-critical'), 'a severity stripe, not a red row');
+    assert.ok(!first.classList.contains('danger'));
+    assert.ok(second.classList.contains('ub-sev-ok'));
     assert.equal(cells(first)[1].textContent, 'UPS A');
     assert.equal(cells(first)[3].querySelector('.label-danger').textContent, 'ups.on_battery');
     assert.ok(cells(first)[5].classList.contains('danger'), 'runtime cell is red');
@@ -503,19 +505,52 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     assert.equal(cells(second)[12].textContent, '–');
 });
 
-test('UPS overview: a row opens to show all sensors grouped by class', async () => {
+test('UPS overview: a row opens to show all sensors in one card per class, problems on top', async () => {
     const page = await boot({ defaultView: 'ups' });
     const toggle = page.rows()[0].querySelector('.ub-toggle');
 
     toggle.click();
     const details = page.document.querySelector('#ub-body tr.ub-details');
     assert.ok(details, 'details row added');
-    assert.deepEqual([...details.querySelectorAll('dt')].map((dt) => dt.textContent), ['Voltage', 'Frequency']);
-    assert.ok(details.querySelector('dd').textContent.includes('Input: 230 V'));
-    assert.ok(details.querySelector('.text-warning'), 'warning sensor is coloured');
+    assert.deepEqual([...details.querySelectorAll('.ub-group h5')].map((h) => h.textContent), ['Voltage (2)', 'Frequency (1)']);
+    const first = details.querySelector('.ub-group .ub-item');
+    assert.equal(first.querySelector('.ub-item-name').textContent, 'Input');
+    assert.equal(first.querySelector('.ub-item-value').textContent, '230 V');
+
+    const problems = details.querySelector('.ub-problems');
+    assert.ok(problems.textContent.startsWith('ups.problems (1)'));
+    assert.ok(problems.querySelector('.ub-item-warning').textContent.includes('Frequency'));
 
     toggle.click();
     assert.equal(page.document.querySelector('#ub-body tr.ub-details'), null);
+});
+
+test('UPS overview: long sensor lists show the problems first and the rest on request', async () => {
+    const states = Array.from({ length: 10 }, (_, i) => ({
+        class: 'state', label: 'State', sensor_descr: 'Output ' + i, value_formatted: i === 7 ? 'error' : 'normal',
+        severity: i === 7 ? 'critical' : 'ok', sensor_url: '/s/' + i, graph_url: '/g/' + i,
+    }));
+    const many = (url) => {
+        const body = DEFAULT_ROUTES['/plugin/ups-battery/ups'](url);
+        return { ...body, rows: [{ ...body.rows[1], sensors: states }] };
+    };
+    const page = await boot({ defaultView: 'ups', routes: { '/plugin/ups-battery/ups': many } });
+    page.rows()[0].querySelector('.ub-toggle').click();
+
+    const group = page.document.querySelector('.ub-detail-grid .ub-group');
+    const items = [...group.querySelectorAll('.ub-item')];
+    const visible = () => items.filter((li) => li.style.display !== 'none').length;
+    assert.equal(items.length, 10);
+    assert.equal(items[0].querySelector('.ub-item-name').textContent, 'Output 7', 'the critical one comes first');
+    assert.equal(visible(), 6);
+
+    const more = group.querySelector('.ub-more');
+    assert.equal(more.textContent, 'ups.more_sensors');
+    more.click();
+    assert.equal(visible(), 10);
+    assert.equal(more.textContent, 'ups.less_sensors');
+    more.click();
+    assert.equal(visible(), 6);
 });
 
 test('UPS overview: the battery install date can be set and the list reloads', async () => {

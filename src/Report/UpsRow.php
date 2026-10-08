@@ -74,7 +74,7 @@ final readonly class UpsRow
             'sensors' => array_map(fn (ReportRow $sensor): array => [
                 'class' => $sensor->sensorClass,
                 'label' => $classLabel($sensor->sensorClass),
-                'sensor_descr' => $sensor->sensorDescr,
+                'sensor_descr' => self::name($sensor),
                 'value_formatted' => $sensor->valueFormatted,
                 'severity' => $sensor->severity->value,
                 'sensor_url' => $sensor->sensorUrl,
@@ -83,12 +83,24 @@ final readonly class UpsRow
         ];
     }
 
+    /** Sensors without a description get their state name or sensor id, so the details never show a bare value. */
+    private static function name(ReportRow $sensor): string
+    {
+        if (trim($sensor->sensorDescr) !== '') {
+            return $sensor->sensorDescr;
+        }
+
+        return trim($sensor->sensorType) !== '' && $sensor->sensorType !== $sensor->sensorClass
+            ? $sensor->sensorType
+            : 'Sensor '.$sensor->sensorId;
+    }
+
     /** @return array<string, mixed>|null */
     private static function cell(?ReportRow $row): ?array
     {
         return $row === null ? null : [
             'sensor_id' => $row->sensorId,
-            'sensor_descr' => $row->sensorDescr,
+            'sensor_descr' => self::name($row),
             'sensor_url' => $row->sensorUrl,
             'graph_url' => $row->graphUrl,
             'trend_url' => $row->trendUrl,

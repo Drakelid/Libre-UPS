@@ -451,3 +451,16 @@ it('exports the battery life used and the issues in the CSV', function (): void 
     expect($line['battery_life_used'])->toBe('169')
         ->and($line['issues'])->toBe('swap_overdue');
 });
+
+it('names sensors without a description in the details', function (): void {
+    $row = upsBuilder()->row([
+        upsSensor(1, 'runtime', 30.0),
+        upsSensor(1, 'voltage', 0.0, ['sensorDescr' => '', 'sensorId' => 501]),
+        upsSensor(1, 'state', 2.0, ['sensorDescr' => ' ', 'sensorType' => 'eltekRectifierState']),
+    ], null);
+    $names = array_column($row->toArray(fn (string $c): string => $c)['sensors'], 'sensor_descr', 'class');
+
+    expect($names['voltage'])->toBe('Sensor 501')
+        ->and($names['state'])->toBe('eltekRectifierState')
+        ->and($names['runtime'])->toBe('Runtime');
+});

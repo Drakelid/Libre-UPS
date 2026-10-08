@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-10-08
+
+### Changed
+
+- The details of a UPS are laid out as one card per sensor class (runtime, charge, load, voltage, current, power, frequency, temperature, state, count, then the rest) with one "name … value" line per sensor, instead of one long line per class. Sensors with a warning or error are listed on top and come first in their card; cards with more than six sensors show the rest on request.
+- Rows in the UPS overview get a coloured stripe on the left (red, yellow, green) instead of a fully coloured row, so the cells that have the problem stay readable, also in a dark theme.
+
+### Fixed
+
+- Sensors without a description showed as ": 0 V" in the details; they are now named after their state name or sensor id.
+
 ## [1.3.0] - 2026-10-08
 
 ### Added
