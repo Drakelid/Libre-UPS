@@ -124,6 +124,7 @@ const DEFAULT_ROUTES = {
 function upsRow(overrides = {}) {
     return {
         device_id: 1, hostname: 'ups-a', display_name: 'UPS A', device_url: '/device/1', location: 'Site A', os: 'apc', device_up: true,
+        manufacturer: 'APC', model: 'Smart-UPS SRT 3000', logo_url: '/images/logos/apc.svg',
         severity: 'ok', on_battery: null, suspect: false,
         runtime: cell('4 min', 'critical'), charge: cell('100 %', 'ok'), load: cell('10 %', 'ok'), temperature: cell('31 °C', 'warning'),
         battery: cell('noBatteryNeedsReplacing', 'ok'), bad_packs: null, output: null, self_test: cell('ok', 'ok'),
@@ -502,16 +503,16 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     assert.ok(second.classList.contains('ub-sev-ok'));
     assert.equal(cells(first)[1].querySelector('a').textContent, 'UPS A');
     assert.equal(cells(first)[1].querySelector('small').textContent, 'Site A', 'the location sits under the hostname');
-    assert.equal(cells(first)[2].querySelector('.label-danger').textContent, 'on_battery');
-    assert.ok(cells(first)[4].classList.contains('danger'), 'runtime cell is red');
-    assert.ok(cells(first)[8].textContent.includes('ups.bad_packs'));
-    assert.ok(cells(first)[8].textContent.includes('suspect.yes'));
-    assert.ok(cells(first)[10].textContent.startsWith('2024-01-01'));
-    assert.ok(cells(first)[10].classList.contains('danger'));
-    assert.equal(cells(first)[10].querySelector('.ub-sub').textContent, 'ups.col_installed: 2020-01-01', 'the install date sits under the swap date');
-    assert.equal(cells(first).length, 11);
-    assert.equal(cells(second)[2].querySelector('.label-success').textContent, 'on_mains');
-    assert.ok(cells(second)[10].textContent.startsWith('–'));
+    assert.equal(cells(first)[4].querySelector('.label-danger').textContent, 'on_battery');
+    assert.ok(cells(first)[6].classList.contains('danger'), 'runtime cell is red');
+    assert.ok(cells(first)[10].textContent.includes('ups.bad_packs'));
+    assert.ok(cells(first)[10].textContent.includes('suspect.yes'));
+    assert.ok(cells(first)[12].textContent.startsWith('2024-01-01'));
+    assert.ok(cells(first)[12].classList.contains('danger'));
+    assert.equal(cells(first)[12].querySelector('.ub-sub').textContent, 'ups.col_installed: 2020-01-01', 'the install date sits under the swap date');
+    assert.equal(cells(first).length, 13);
+    assert.equal(cells(second)[4].querySelector('.label-success').textContent, 'on_mains');
+    assert.ok(cells(second)[12].textContent.startsWith('–'));
 });
 
 test('UPS overview: a row opens to show all sensors in one card per class, problems on top', async () => {
@@ -694,31 +695,31 @@ test('UPS overview: an empty timeline says so instead of showing empty bars', as
 test('UPS overview: the attention column says why a UPS needs a look', async () => {
     const page = await boot({ defaultView: 'ups' });
     const [first, second] = page.rows();
-    const attention = first.children[3];
+    const attention = first.children[5];
     const badges = [...attention.querySelectorAll('.label')];
 
-    assert.equal(page.document.querySelectorAll('#ub-head th')[3].textContent, 'ups.col_attention');
+    assert.equal(page.document.querySelectorAll('#ub-head th')[5].textContent, 'ups.col_attention');
     assert.equal(badges.length, 3);
     assert.ok(badges[0].classList.contains('label-danger'));
     assert.equal(badges[0].textContent, 'on_battery');
     assert.ok(attention.textContent.includes('issues.more'), 'the rest is summarised');
     assert.equal(attention.title.split('\n').length, 5, 'the tooltip lists every issue');
-    assert.equal(second.children[3].textContent, '–');
+    assert.equal(second.children[5].textContent, '–');
 });
 
 test('UPS overview: charge, load and battery life get a bar', async () => {
     const page = await boot({ defaultView: 'ups' });
     const first = page.rows()[0];
-    const charge = first.children[5].querySelector('.ub-bar > span');
-    const life = first.children[10].querySelector('.ub-bar');
+    const charge = first.children[7].querySelector('.ub-bar > span');
+    const life = first.children[12].querySelector('.ub-bar');
 
     assert.ok(charge, 'charge bar');
-    assert.ok(first.children[6].querySelector('.ub-bar'), 'load bar');
-    assert.equal(first.children[4].querySelector('.ub-bar'), null, 'no bar for runtime');
+    assert.ok(first.children[8].querySelector('.ub-bar'), 'load bar');
+    assert.equal(first.children[6].querySelector('.ub-bar'), null, 'no bar for runtime');
     assert.ok(life.classList.contains('ub-bar-critical'));
     assert.equal(life.firstChild.style.width, '100%', 'capped at 100 %');
     assert.equal(life.title, 'ups.life_used');
-    assert.equal(page.rows()[1].children[10].querySelector('.ub-bar'), null);
+    assert.equal(page.rows()[1].children[12].querySelector('.ub-bar'), null);
 });
 
 // ---- refined layout ----
@@ -773,11 +774,11 @@ test('UPS overview: "on battery" is a pill with a dot, "on mains" a soft pill', 
     const page = await boot({ defaultView: 'ups' });
     const [first, second] = page.rows();
 
-    const onBattery = first.children[2].querySelector('.label-danger');
+    const onBattery = first.children[4].querySelector('.label-danger');
     assert.ok(onBattery.classList.contains('ub-pill'));
     assert.ok(onBattery.querySelector('.ub-dot'), 'pulsing dot');
-    assert.ok(second.children[2].querySelector('.label-success').classList.contains('ub-pill-soft'));
-    assert.ok([...first.children[3].querySelectorAll('.label')].every((b) => b.classList.contains('ub-pill-soft')), 'attention badges are soft');
+    assert.ok(second.children[4].querySelector('.label-success').classList.contains('ub-pill-soft'));
+    assert.ok([...first.children[5].querySelectorAll('.label')].every((b) => b.classList.contains('ub-pill-soft')), 'attention badges are soft');
 });
 
 test('UPS overview: numbers are right-aligned and the swap countdown is a coloured pill', async () => {
@@ -786,8 +787,8 @@ test('UPS overview: numbers are right-aligned and the swap countdown is a colour
     const first = page.rows()[0];
 
     assert.deepEqual(heads.filter((th) => th.classList.contains('ub-num')).map((th) => th.getAttribute('data-sort')), ['runtime', 'charge', 'load', 'temperature']);
-    assert.deepEqual([4, 5, 6, 7].map((i) => first.children[i].classList.contains('ub-num')), [true, true, true, true]);
-    const countdown = first.children[10].querySelector('.ub-pill');
+    assert.deepEqual([6, 7, 8, 9].map((i) => first.children[i].classList.contains('ub-num')), [true, true, true, true]);
+    const countdown = first.children[12].querySelector('.ub-pill');
     assert.ok(countdown.classList.contains('label-danger'));
     assert.equal(countdown.textContent, 'ups.overdue');
 });
@@ -831,8 +832,8 @@ function wordedRoute(url) {
 test('UPS overview: the status column says where the load is powered from, and explains it', async () => {
     const page = await boot({ defaultView: 'ups', texts: WORDING, routes: { '/plugin/ups-battery/ups': wordedRoute } });
     const [first, second] = page.rows();
-    const onBattery = first.children[2].querySelector('.ub-pill');
-    const unknown = second.children[2].querySelector('.ub-pill');
+    const onBattery = first.children[4].querySelector('.ub-pill');
+    const unknown = second.children[4].querySelector('.ub-pill');
 
     assert.equal(onBattery.textContent, 'On battery');
     assert.ok(onBattery.title.startsWith('The mains supply is gone'));
@@ -843,7 +844,7 @@ test('UPS overview: the status column says where the load is powered from, and e
 
 test('UPS overview: attention messages are sentences with the value', async () => {
     const page = await boot({ defaultView: 'ups', texts: WORDING, routes: { '/plugin/ups-battery/ups': wordedRoute } });
-    const badges = [...page.rows()[0].children[3].querySelectorAll('.label')].map((b) => b.textContent);
+    const badges = [...page.rows()[0].children[5].querySelectorAll('.label')].map((b) => b.textContent);
 
     assert.deepEqual(badges, ['Running on battery', 'Runtime low: 4 min', 'Battery swap overdue by 1011 days']);
 });
@@ -851,8 +852,8 @@ test('UPS overview: attention messages are sentences with the value', async () =
 test('UPS overview: battery and self-test show plain words, the vendor text stays in the tooltip', async () => {
     const page = await boot({ defaultView: 'ups', texts: WORDING, routes: { '/plugin/ups-battery/ups': wordedRoute } });
     const first = page.rows()[0];
-    const battery = first.children[8].querySelector('a');
-    const selfTest = first.children[9].querySelector('a');
+    const battery = first.children[10].querySelector('a');
+    const selfTest = first.children[11].querySelector('a');
 
     assert.equal(battery.textContent, 'Replace battery');
     assert.ok(battery.title.endsWith('batteryNeedsReplacing'));
@@ -864,7 +865,53 @@ test('UPS overview: column headers explain what they show', async () => {
     const page = await boot({ defaultView: 'ups', texts: WORDING });
     const heads = [...page.document.querySelectorAll('#ub-head th')];
 
-    assert.equal(heads[2].title, 'Where the load is powered from');
-    assert.ok(heads[2].classList.contains('ub-help'));
-    assert.equal(heads[3].title, 'Why this UPS needs a look');
+    assert.equal(heads[4].title, 'Where the load is powered from');
+    assert.ok(heads[4].classList.contains('ub-help'));
+    assert.equal(heads[5].title, 'Why this UPS needs a look');
+});
+
+// ---- manufacturer, model and logo ----
+
+test('UPS overview: brand logo next to the hostname, and manufacturer and model columns', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const first = page.rows()[0];
+    const heads = [...page.document.querySelectorAll('#ub-head th')];
+    const img = first.children[1].querySelector('img.ub-logo');
+
+    assert.equal(heads[2].getAttribute('data-sort'), 'manufacturer');
+    assert.equal(heads[3].getAttribute('data-sort'), 'model');
+    assert.equal(img.getAttribute('src'), ORIGIN + '/images/logos/apc.svg', 'from the page origin, not the <base href> host');
+    assert.equal(img.alt, 'APC');
+    assert.equal(first.children[2].textContent, 'APC');
+    assert.equal(first.children[3].textContent, 'Smart-UPS SRT 3000');
+    assert.ok(first.children[3].classList.contains('ub-model'));
+});
+
+test('UPS overview: no logo or manufacturer gives no image and a dash', async () => {
+    const plain = (url) => {
+        const body = DEFAULT_ROUTES['/plugin/ups-battery/ups'](url);
+        return { ...body, rows: [{ ...body.rows[0], manufacturer: null, model: null, logo_url: null }] };
+    };
+    const page = await boot({ defaultView: 'ups', routes: { '/plugin/ups-battery/ups': plain } });
+    const first = page.rows()[0];
+
+    assert.equal(first.children[1].querySelector('img'), null);
+    assert.equal(first.children[2].textContent, '–');
+    assert.equal(first.children[3].textContent, '–');
+});
+
+test('UPS overview: a logo that does not load is removed', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const img = page.rows()[0].children[1].querySelector('img.ub-logo');
+
+    img.dispatchEvent(new page.window.Event('error'));
+    assert.equal(page.rows()[0].children[1].querySelector('img'), null);
+});
+
+test('UPS overview: sorting by manufacturer goes to the server', async () => {
+    const page = await boot({ defaultView: 'ups' });
+
+    page.document.querySelector('#ub-head th[data-sort="manufacturer"]').click();
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('sort'), 'manufacturer');
 });

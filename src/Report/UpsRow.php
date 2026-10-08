@@ -37,6 +37,9 @@ final readonly class UpsRow
         public array $sensors,
         public array $issues = [],
         public ?ReportRow $powerSensor = null,
+        public ?string $manufacturer = null,
+        public ?string $model = null,
+        public ?string $logoUrl = null,
     ) {}
 
     /** True when anything about the UPS needs a look. */
@@ -59,6 +62,9 @@ final readonly class UpsRow
             'location' => $this->location,
             'os' => $this->os,
             'device_up' => $this->deviceUp,
+            'manufacturer' => $this->manufacturer,
+            'model' => $this->model,
+            'logo_url' => $this->logoUrl,
             'severity' => $this->severity->value,
             'status' => [
                 'key' => UpsLabels::status($this->deviceUp, $this->onBattery, $this->output?->valueFormatted),

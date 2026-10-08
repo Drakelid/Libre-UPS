@@ -16,7 +16,7 @@
     const LIMITS = ['10', '25', '50', '100', '0'];
     const MAX_METRICS = 6;
     const SINGLE_SORTS = ['hostname', 'location', 'descr', 'value', 'lastupdate'];
-    const UPS_SORTS = ['status', 'hostname', 'location', 'runtime', 'charge', 'load', 'temperature', 'swap'];
+    const UPS_SORTS = ['status', 'hostname', 'location', 'manufacturer', 'model', 'runtime', 'charge', 'load', 'temperature', 'swap'];
     const VIEWS = ['ups', 'single', 'matrix'];
     const FOCUS = ['on_battery', 'overdue', 'due', 'alarm', 'unknown', 'down'];
     const MAX_BADGES = 3;
@@ -734,6 +734,34 @@
         return span;
     }
 
+    /** The brand logo LibreNMS has for the device (its OS icon when there is no logo); removed if it fails to load. */
+    function logo(r) {
+        const url = safeHref(r.logo_url);
+        if (!url) { return null; }
+        const img = document.createElement('img');
+        img.className = 'ub-logo';
+        img.src = url;
+        img.alt = r.manufacturer || '';
+        img.title = r.manufacturer || '';
+        img.loading = 'lazy';
+        img.addEventListener('error', () => img.remove());
+        return img;
+    }
+
+    /** A plain text cell; empty values show a faint dash. */
+    function textCell(text, className) {
+        const td = document.createElement('td');
+        if (text) {
+            td.textContent = text;
+            td.title = text;
+            if (className) { td.className = className; }
+        } else {
+            td.className = 'text-muted ub-dash';
+            td.textContent = '–';
+        }
+        return td;
+    }
+
     /** Colour of each status pill; "on battery" is the only solid one, with a pulsing dot. */
     const STATUS_KINDS = { on_battery: 'danger', on_mains: 'success', bypass: 'warning', battery_test: 'info', off: 'danger', unreachable: 'default', unknown: 'default' };
 
@@ -1107,6 +1135,8 @@
         const columns = [
             { sort: null, label: '' },
             { sort: 'hostname', label: T.columns.hostname },
+            { sort: 'manufacturer', label: T.ups.col_manufacturer, help: T.column_help.manufacturer },
+            { sort: 'model', label: T.ups.col_model, help: T.column_help.model },
             { sort: 'status', label: T.ups.col_status, help: T.column_help.status },
             { sort: null, label: T.ups.col_attention, help: T.column_help.attention },
             { sort: 'runtime', label: T.ups.col_runtime, cls: 'ub-num', help: T.column_help.runtime },
@@ -1147,16 +1177,26 @@
             }));
             tr.appendChild(toggle);
 
-            // Hostname with the location below it, to keep the table narrow.
+            // Brand logo, then the hostname with the location below it.
             const host = document.createElement('td');
             host.className = 'ub-host';
-            host.appendChild(link(r.display_name, r.device_url, r.hostname));
+            const wrap = document.createElement('div');
+            wrap.className = 'ub-host-wrap';
+            const brand = logo(r);
+            if (brand) { wrap.appendChild(brand); }
+            const name = document.createElement('div');
+            name.className = 'ub-host-name';
+            name.appendChild(link(r.display_name, r.device_url, r.hostname));
             if (r.location) {
                 const location = document.createElement('small');
                 location.textContent = r.location;
-                host.appendChild(location);
+                name.appendChild(location);
             }
+            wrap.appendChild(name);
+            host.appendChild(wrap);
             tr.appendChild(host);
+            tr.appendChild(textCell(r.manufacturer));
+            tr.appendChild(textCell(r.model, 'ub-model'));
             tr.appendChild(statusCell(r));
             tr.appendChild(attentionCell(r));
             [sensorCell(r.runtime, r.display_name), sensorCell(r.charge, r.display_name, true),

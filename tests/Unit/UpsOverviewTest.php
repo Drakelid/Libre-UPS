@@ -303,7 +303,7 @@ it('turns a UPS row into the JSON the page reads', function (): void {
     $row = upsBuilder()->row([upsSensor(1, 'runtime', 30.0), upsSensor(1, 'voltage', 230.0, ['sensorDescr' => 'Input'])], '2024-01-01');
     $data = $row->toArray(fn (string $class): string => strtoupper($class));
 
-    expect(array_keys($data))->toBe(['device_id', 'hostname', 'display_name', 'device_url', 'location', 'os', 'device_up', 'severity', 'status', 'battery_label', 'self_test_label', 'on_battery', 'suspect', 'runtime', 'charge', 'load', 'temperature', 'battery', 'bad_packs', 'output', 'self_test', 'swap', 'issues', 'sensors'])
+    expect(array_keys($data))->toBe(['device_id', 'hostname', 'display_name', 'device_url', 'location', 'os', 'device_up', 'manufacturer', 'model', 'logo_url', 'severity', 'status', 'battery_label', 'self_test_label', 'on_battery', 'suspect', 'runtime', 'charge', 'load', 'temperature', 'battery', 'bad_packs', 'output', 'self_test', 'swap', 'issues', 'sensors'])
         ->and($data['runtime']['value'])->toBe(30.0)
         ->and($data['charge'])->toBeNull()
         ->and($data['swap']['due'])->toBe('2028-01-01')

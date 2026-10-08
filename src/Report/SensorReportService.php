@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
+use LibreNMS\Config;
 use LibreNMS\Util\Url;
 use stdClass;
 use Throwable;
@@ -248,6 +249,7 @@ final class SensorReportService
 
         $fahrenheit = $this->usesFahrenheit($user);
         $sensorsByDevice = [];
+        $devices = [];
         if ($deviceIds !== []) {
             $sensors = Sensor::query()
                 ->leftJoin('devices', 'devices.device_id', '=', 'sensors.device_id')
@@ -260,14 +262,42 @@ final class SensorReportService
 
             foreach ($sensors as $sensor) {
                 if ($sensor->device !== null) {
-                    $sensorsByDevice[(int) $sensor->device_id][] = $this->toRow($sensor, $fahrenheit, $settings->thresholds);
+                    $deviceId = (int) $sensor->device_id;
+                    $devices[$deviceId] ??= $this->deviceDetails($sensor->device);
+                    $sensorsByDevice[$deviceId][] = $this->toRow($sensor, $fahrenheit, $settings->thresholds);
                 }
             }
         }
 
         $builder = new UpsBuilder($settings->suspectRule, $settings->batteryLifetimeMonths, $settings->swapWarnDays, Carbon::now()->toImmutable());
 
-        return $builder->build($sensorsByDevice, $this->installedDates($deviceIds), $filters);
+        return $builder->build($sensorsByDevice, $this->installedDates($deviceIds), $filters, $devices);
+    }
+
+    /**
+     * Manufacturer, model and brand logo of a UPS. The logo is LibreNMS' own: the brand logo, else the OS icon.
+     *
+     * @return array{manufacturer: ?string, model: ?string, logo: ?string}
+     */
+    private function deviceDetails(Device $device): array
+    {
+        $os = (string) $device->os;
+
+        try {
+            $text = Config::getOsSetting($os, 'text');
+            $logo = Urls::relative((string) $device->logo());
+            $icon = (string) $device->icon;
+        } catch (Throwable) {
+            $text = null;
+            $logo = null;
+            $icon = null;
+        }
+
+        return [
+            'manufacturer' => UpsVendor::name($os, $icon, is_string($text) ? $text : null),
+            'model' => UpsVendor::model(is_scalar($device->hardware) ? (string) $device->hardware : null),
+            'logo' => $logo,
+        ];
     }
 
     /** Stores the battery install date of a UPS the user can see (null removes it). */

@@ -53,6 +53,8 @@ return [
         'needs_metrics' => 'Krever måleverdiene runtime og load',
     ],
     'ups' => [
+        'col_manufacturer' => 'Produsent',
+        'col_model' => 'Modell',
         'col_status' => 'Status',
         'col_runtime' => 'Batteritid',
         'col_charge' => 'Lading',
@@ -159,6 +161,8 @@ return [
         'warning' => 'Advarsel',
     ],
     'column_help' => [
+        'manufacturer' => 'Produsent av UPS-en, ut fra enhetstypen LibreNMS har funnet',
+        'model' => 'Maskinvaremodell slik LibreNMS rapporterer den',
         'status' => 'Hvor lasten får strøm fra: nett, batteri eller bypass',
         'attention' => 'Hvorfor denne UPS-en bør sjekkes, viktigst først',
         'runtime' => 'Hvor lenge batteriet kan bære dagens last',

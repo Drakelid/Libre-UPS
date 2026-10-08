@@ -99,6 +99,11 @@
     #ups-battery tr.ub-sev-ok > td:first-child { border-left-color: var(--ub-green); }
     #ups-battery tr.text-muted > td { opacity: .65; }
     #ups-battery .ub-host a { font-weight: 600; }
+    #ups-battery .ub-host-wrap { display: flex; align-items: center; gap: 10px; }
+    #ups-battery .ub-host-name { min-width: 0; }
+    /* Logos are drawn for light backgrounds, so they get a light tile of their own (readable in the dark theme too). */
+    #ups-battery .ub-logo { flex: none; width: 52px; height: 26px; object-fit: contain; padding: 2px 4px; background: #fff; border: 1px solid var(--ub-line-soft); border-radius: 4px; }
+    #ups-battery .ub-model { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #ups-battery .ub-host small { display: block; opacity: .65; }
     #ups-battery .ub-sub { font-size: .82em; opacity: .75; margin-top: 3px; white-space: nowrap; }
     #ups-battery .ub-toggle, #ups-battery .ub-edit { padding: 0 4px; }

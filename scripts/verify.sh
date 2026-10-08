@@ -116,7 +116,7 @@ $first = $p["rows"][0] ?? null;
 if ($first) { $dev = App\Models\Device::find($first->deviceId); echo "device card rows for ".$first->hostname.": ".count($svc->forDevice($dev, $user, $settings->thresholds))." next swap: ".json_encode($svc->deviceSwap($dev, $settings)->toArray()).PHP_EOL; }
 $ups = $svc->ups($user, Drakelid\UpsBattery\Report\UpsFilters::fromArray(["type" => "", "limit" => "0"], []), $settings);
 echo "--- UPS overview --- total ".$ups["total"]." cards ".json_encode($ups["cards"]).PHP_EOL;
-foreach (array_slice($ups["rows"], 0, 10) as $u) { echo "  ".$u->hostname."\t".$u->severity->value."\truntime=".($u->runtime?->valueFormatted ?? "-")."\tbattery=".($u->battery?->valueFormatted ?? "-")."\toutput=".($u->output?->valueFormatted ?? "-")."\tself-test=".($u->selfTest?->valueFormatted ?? "-")."\tswap=".($u->swap->due ?? "-")." (".$u->swap->source.")\tsensors=".count($u->sensors).PHP_EOL; }
+foreach (array_slice($ups["rows"], 0, 10) as $u) { echo "  ".$u->hostname."\t".($u->manufacturer ?? "-")." ".($u->model ?? "-")."\t".$u->severity->value."\truntime=".($u->runtime?->valueFormatted ?? "-")."\tbattery=".($u->battery?->valueFormatted ?? "-")."\toutput=".($u->output?->valueFormatted ?? "-")."\tself-test=".($u->selfTest?->valueFormatted ?? "-")."\tswap=".($u->swap->due ?? "-")." (".$u->swap->source.")\tsensors=".count($u->sensors).PHP_EOL; }
 echo "SMOKE_DONE".PHP_EOL;
 ' >/tmp/ups-battery-smoke.log 2>&1
 cat /tmp/ups-battery-smoke.log | sed 's/^/    /'

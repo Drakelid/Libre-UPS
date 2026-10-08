@@ -116,7 +116,7 @@ final class CsvFormatter
     public function upsHeader(): array
     {
         return [
-            'hostname', 'display_name', 'location', 'os', 'status', 'on_battery',
+            'hostname', 'display_name', 'location', 'os', 'manufacturer', 'model', 'status', 'on_battery',
             'runtime', 'charge', 'load', 'temperature', 'battery_status', 'bad_battery_packs', 'self_test', 'suspect_battery',
             'battery_installed', 'swap_due', 'swap_days_left', 'swap_source', 'battery_life_used', 'issues',
         ];
@@ -134,6 +134,8 @@ final class CsvFormatter
             $this->guard($row->displayName),
             $this->guard($row->location ?? ''),
             $this->guard($row->os),
+            $this->guard($row->manufacturer ?? ''),
+            $this->guard($row->model ?? ''),
             $row->severity->value,
             $flag($row->onBattery),
             $number($row->runtime),

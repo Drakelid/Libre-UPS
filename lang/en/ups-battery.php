@@ -53,6 +53,8 @@ return [
         'needs_metrics' => 'Needs the runtime and load metrics',
     ],
     'ups' => [
+        'col_manufacturer' => 'Manufacturer',
+        'col_model' => 'Model',
         'col_status' => 'Status',
         'col_runtime' => 'Runtime',
         'col_charge' => 'Charge',
@@ -159,6 +161,8 @@ return [
         'warning' => 'Warning',
     ],
     'column_help' => [
+        'manufacturer' => 'Manufacturer of the UPS, from the device type LibreNMS detected',
+        'model' => 'Hardware model as LibreNMS reports it',
         'status' => 'Where the load is powered from: mains, battery or bypass',
         'attention' => 'Why this UPS needs a look, most important first',
         'runtime' => 'How long the battery can carry the current load',

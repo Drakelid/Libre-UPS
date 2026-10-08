@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-10-08
+
+### Added
+
+- **Brand logo, manufacturer and model** in the UPS overview. The logo is the one LibreNMS shows for the device (its brand logo, else its OS icon), on a light tile so it is readable in the dark theme too. The manufacturer comes from the LibreNMS OS of the device (a list for every UPS OS), else from the brand of the OS icon, else from the OS name; for a UPS behind NUT on a Linux host it is unknown. The model is the hardware LibreNMS reports. Both columns can be sorted (`sort=manufacturer`, `sort=model`) and are in the JSON (`manufacturer`, `model`, `logo_url`) and the CSV.
+
 ## [1.3.5] - 2026-10-08
 
 ### Fixed

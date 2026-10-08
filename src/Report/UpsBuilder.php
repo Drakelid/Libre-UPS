@@ -22,13 +22,14 @@ final class UpsBuilder
     /**
      * @param  array<int, ReportRow[]>  $sensorsByDevice  All sensors per device id.
      * @param  array<int, string>  $installed  Battery install dates (Y-m-d) entered by users, per device id.
+     * @param  array<int, array{manufacturer?: ?string, model?: ?string, logo?: ?string}>  $devices  Device details per device id.
      * @return array{rows: UpsRow[], total: int, cards: array<string, mixed>}
      */
-    public function build(array $sensorsByDevice, array $installed, UpsFilters $filters): array
+    public function build(array $sensorsByDevice, array $installed, UpsFilters $filters, array $devices = []): array
     {
         $rows = [];
         foreach ($sensorsByDevice as $deviceId => $sensors) {
-            $row = $this->row($sensors, $installed[$deviceId] ?? null);
+            $row = $this->row($sensors, $installed[$deviceId] ?? null, $devices[$deviceId] ?? []);
             if ($row !== null) {
                 $rows[] = $row;
             }
@@ -59,8 +60,9 @@ final class UpsBuilder
      * battery date).
      *
      * @param  ReportRow[]  $sensors
+     * @param  array{manufacturer?: ?string, model?: ?string, logo?: ?string}  $device  Manufacturer, model and logo URL.
      */
-    public function row(array $sensors, ?string $installed): ?UpsRow
+    public function row(array $sensors, ?string $installed, array $device = []): ?UpsRow
     {
         if ($sensors === []) {
             return null;
@@ -155,6 +157,9 @@ final class UpsBuilder
             self::sortedSensors($sensors),
             $issues,
             $powerSensor,
+            $device['manufacturer'] ?? null,
+            $device['model'] ?? null,
+            $device['logo'] ?? null,
         );
     }
 
@@ -484,6 +489,8 @@ final class UpsBuilder
         usort($rows, function (UpsRow $a, UpsRow $b) use ($filters, $ascending): int {
             $primary = match ($filters->sort) {
                 'hostname' => RowProcessor::compareText($a->hostname, $b->hostname, $ascending),
+                'manufacturer' => RowProcessor::compareText($a->manufacturer, $b->manufacturer, $ascending),
+                'model' => RowProcessor::compareText($a->model, $b->model, $ascending),
                 'location' => RowProcessor::compareText($a->location, $b->location, $ascending),
                 'swap' => self::compareNumber($a->swap->daysLeft, $b->swap->daysLeft, $ascending),
                 'status' => ($ascending ? 1 : -1) * ($a->severity->rank() <=> $b->severity->rank())

@@ -10,7 +10,7 @@ use InvalidArgumentException;
 final readonly class UpsFilters
 {
     /** "status" sorts by the worst problem of the UPS, "swap" by the days left until the battery swap. */
-    public const SORTS = ['status', 'hostname', 'location', 'runtime', 'charge', 'load', 'temperature', 'swap'];
+    public const SORTS = ['status', 'hostname', 'location', 'manufacturer', 'model', 'runtime', 'charge', 'load', 'temperature', 'swap'];
 
     /** Summary cards that can be clicked to show only those UPSs. */
     public const FOCUS = ['on_battery', 'overdue', 'due', 'alarm', 'unknown', 'down'];
