@@ -38,7 +38,7 @@ function pageHtml(config) {
     const content = view.split("@section('content')")[1].split('@endsection')[0];
     const json = JSON.stringify(config).replace(/</g, '\\u003c');
 
-    return `<!doctype html><html><head><meta name="csrf-token" content="token-123"></head><body>${content
+    return `<!doctype html><html><head><base href="https://base-url.example/"><meta name="csrf-token" content="token-123"></head><body>${content
         .replace(/\{\{--[\s\S]*?--\}\}/g, '')
         .replace(/<script type="application\/json" id="ub-config">[\s\S]*?<\/script>/, `<script type="application/json" id="ub-config">${json}</script>`)
         .replace(/\{\{[\s\S]*?\}\}/g, 'text')}</body></html>`;
@@ -111,8 +111,9 @@ async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0
     const handlers = { ...DEFAULT_ROUTES, ...routes };
 
     dom.window.fetch = async (url, init = {}) => {
-        const parsed = new URL(url, ORIGIN);
-        calls.push({ path: parsed.pathname, params: parsed.searchParams, method: init.method ?? 'GET', body: init.body, headers: init.headers ?? {} });
+        // Like a browser, a path is resolved against the document's base URL (LibreNMS' <base href>).
+        const parsed = new URL(url, dom.window.document.baseURI);
+        calls.push({ origin: parsed.origin, path: parsed.pathname, params: parsed.searchParams, method: init.method ?? 'GET', body: init.body, headers: init.headers ?? {} });
         const handler = handlers[parsed.pathname];
         if (handler === undefined) { return { ok: false, status: 404, json: async () => ({ message: 'not found' }) }; }
         const body = typeof handler === 'function' ? handler(parsed, init) : handler;
@@ -159,11 +160,22 @@ test('single view: shows a row per sensor with severity colour, link and trend i
     assert.equal(page.rows().length, 2);
     assert.ok(first.classList.contains('danger'));
     assert.ok(!second.classList.contains('danger'));
-    assert.equal(first.querySelector('a').getAttribute('href'), '/device/1');
+    assert.equal(first.querySelector('a').getAttribute('href'), ORIGIN + '/device/1');
     assert.equal(first.querySelector('a').textContent, 'UPS A');
     assert.ok(first.textContent.includes('4 min'));
-    assert.equal(first.querySelector('a.ub-trend').getAttribute('href'), '/graphs/type=sensor_runtime/id=11/from=-1y');
+    assert.equal(first.querySelector('a.ub-trend').getAttribute('href'), ORIGIN + '/graphs/type=sensor_runtime/id=11/from=-1y');
     assert.ok(second.textContent.includes('1 h 1 min'));
+});
+
+test('requests and links stay on the page origin when LibreNMS\' <base href> names another host', async () => {
+    const page = await boot();
+
+    assert.ok(page.calls.length >= 3);
+    assert.deepEqual([...new Set(page.calls.map((c) => c.origin))], [ORIGIN]);
+    for (const a of page.document.querySelectorAll('#ub-body a, #ub-csv, #ub-csv-all')) {
+        assert.equal(new URL(a.href).origin, ORIGIN, a.getAttribute('href'));
+    }
+    assert.equal(page.window.location.origin, ORIGIN);
 });
 
 test('single view: shows the zero runtime the server sends instead of an empty cell', async () => {

@@ -146,5 +146,13 @@
 @endsection
 
 @push('scripts')
-<script src="{{ $scriptUrl }}"></script>
+{{-- Loaded from this page's own origin: a plain src="/plugin/..." would be resolved against LibreNMS' <base href>,
+     which can name another host than the one in the address bar. --}}
+<script>
+    (function () {
+        var script = document.createElement('script');
+        script.src = window.location.origin + @json($scriptUrl);
+        document.body.appendChild(script);
+    })();
+</script>
 @endpush

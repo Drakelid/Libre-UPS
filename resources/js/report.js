@@ -122,9 +122,9 @@
     }
 
     function updateUrl() {
-        el('ub-csv').setAttribute('href', dataUrl('csv'));
-        el('ub-csv-all').setAttribute('href', exportAllUrl());
-        try { history.replaceState(null, '', cfg.urls.page + '?' + queryParams(null, true).toString()); } catch (e) { /* ignore */ }
+        el('ub-csv').setAttribute('href', absolute(dataUrl('csv')));
+        el('ub-csv-all').setAttribute('href', absolute(exportAllUrl()));
+        try { history.replaceState(null, '', absolute(cfg.urls.page + '?' + queryParams(null, true).toString())); } catch (e) { /* ignore */ }
     }
 
     // ---- network ----
@@ -136,13 +136,21 @@
         });
     }
 
+    /**
+     * LibreNMS pages carry <base href="(base_url)">, which may name another host than the one in the address bar,
+     * and the browser resolves every path against it. Server paths are therefore resolved against this page's origin.
+     */
+    function absolute(url) {
+        return url.charAt(0) === '/' && url.charAt(1) !== '/' ? window.location.origin + url : url;
+    }
+
     function getJson(url, signal) {
-        return fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', signal: signal }).then(handleResponse);
+        return fetch(absolute(url), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', signal: signal }).then(handleResponse);
     }
 
     function postJson(url, payload) {
         const meta = document.querySelector('meta[name="csrf-token"]');
-        return fetch(url, {
+        return fetch(absolute(url), {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -419,7 +427,7 @@
         return td;
     }
 
-    function safeHref(url) { return typeof url === 'string' && /^(https?:\/\/|\/)/.test(url) ? url : null; }
+    function safeHref(url) { return typeof url === 'string' && /^(https?:\/\/|\/(?!\/))/.test(url) ? absolute(url) : null; }
 
     function link(text, url, title) {
         const href = safeHref(url);

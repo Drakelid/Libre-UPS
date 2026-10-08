@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- LibreNMS pages carry `<base href="(base_url)">`, and the browser resolves every host-relative URL (`/plugin/...`) against it. When `base_url` names another host than the one in the address bar, the top navigation link led to a page that did not work, and the page script, its data requests and the links in the table went to that host as well, so no rows were shown. The top navigation item now copies the absolute link of the *Plugins* entry, the page script is loaded from the page's own origin, and the script resolves every server path against `window.location.origin`. The JSON and CSV responses still carry host-relative URLs.
+
 ## [1.1.1] - 2026-10-08
 
 ### Fixed
