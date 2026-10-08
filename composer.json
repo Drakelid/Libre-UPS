@@ -1,0 +1,36 @@
+{
+    "name": "drakelid/librenms-ups-battery",
+    "description": "LibreNMS plugin: rank devices by a selected sensor class (UPS runtime, load, charge ...)",
+    "type": "package",
+    "license": "MIT",
+    "keywords": ["librenms", "plugin", "ups", "sensors"],
+    "require": {
+        "php": "^8.2",
+        "librenms/plugin-interfaces": "^1.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.13",
+        "pestphp/pest": "^3.0"
+    },
+    "autoload": {
+        "psr-4": { "Drakelid\\UpsBattery\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": { "Drakelid\\UpsBattery\\Tests\\": "tests/" }
+    },
+    "extra": {
+        "laravel": {
+            "providers": ["Drakelid\\UpsBattery\\UpsBatteryProvider"]
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "lint": "pint --test",
+        "fix": "pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": { "pestphp/pest-plugin": true }
+    },
+    "minimum-stability": "stable"
+}
