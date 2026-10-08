@@ -11,8 +11,8 @@ final readonly class UpsRow
      * @param  ReportRow[]  $sensors  All sensors of the UPS, for the details.
      * @param  bool|null  $onBattery  From the output state sensor; null without one.
      * @param  bool|null  $suspect  Suspect battery verdict; null without runtime or load.
-     * @param  array<int, array{key: string, severity: string, n: int|null}>  $issues  Why the UPS needs attention,
-     *                                                                                 most severe first (see UpsBuilder::issues).
+     * @param  array<int, array{key: string, severity: string, n: int|null, value: string|null}>  $issues  Why the UPS needs attention,
+     *                                                                                                     most severe first (see UpsBuilder::issues).
      */
     public function __construct(
         public int $deviceId,
@@ -59,6 +59,12 @@ final readonly class UpsRow
             'os' => $this->os,
             'device_up' => $this->deviceUp,
             'severity' => $this->severity->value,
+            'status' => [
+                'key' => UpsLabels::status($this->deviceUp, $this->onBattery, $this->output?->valueFormatted),
+                'detail' => $this->output?->valueFormatted,
+            ],
+            'battery_label' => UpsLabels::battery($this->battery?->valueFormatted),
+            'self_test_label' => UpsLabels::selfTest($this->selfTest?->valueFormatted),
             'on_battery' => $this->onBattery,
             'suspect' => $this->suspect,
             'runtime' => self::cell($this->runtime),

@@ -387,6 +387,10 @@
             const th = document.createElement('th');
             if (c.cls) { th.className = c.cls; }
             th.appendChild(document.createTextNode(c.label));
+            if (c.help) {
+                th.title = c.help;
+                th.classList.add('ub-help');
+            }
             if (c.sort) {
                 th.setAttribute('role', 'button');
                 th.setAttribute('data-sort', c.sort);
@@ -666,9 +670,10 @@
 
     /**
      * A value cell like in the compare view: severity colour, stale icon, link to the sensor and hover graph.
-     * With `withBar` a percentage value (charge, load) also gets a bar.
+     * With `withBar` a percentage value (charge, load) also gets a bar. With `label` the cell shows that plain
+     * wording instead of the vendor text, which stays in the tooltip.
      */
-    function sensorCell(data, title, withBar) {
+    function sensorCell(data, title, withBar, label) {
         const td = document.createElement('td');
         if (!data) {
             td.className = 'text-muted';
@@ -681,15 +686,19 @@
             td.appendChild(staleIcon(data.last_updated));
             td.appendChild(document.createTextNode(' '));
         }
-        td.appendChild(link(data.value_formatted, data.sensor_url, data.sensor_descr));
+        td.appendChild(label
+            ? link(label, data.sensor_url, data.sensor_descr + ': ' + data.value_formatted)
+            : link(data.value_formatted, data.sensor_url, data.sensor_descr));
         if (withBar && typeof data.value === 'number') { td.appendChild(bar(data.value, data.severity, null)); }
         attachGraph(td, data.graph_url, title + ' - ' + data.sensor_descr);
         return td;
     }
 
+    /** The sentence for an issue: "Runtime low: 8 min", "Battery swap overdue by 30 days". */
     function issueText(issue) {
-        const text = (T.issues && T.issues[issue.key]) || issue.key;
-        return issue.n === null || issue.n === undefined ? text : text.replace(':n', issue.n);
+        let text = (T.issues && T.issues[issue.key]) || issue.key;
+        if (issue.n !== null && issue.n !== undefined) { text = text.replace(':n', issue.n); }
+        return text.replace(':value', issue.value === null || issue.value === undefined ? '' : issue.value);
     }
 
     /** Why the UPS needs attention: the most severe issues as badges, all of them in the tooltip. */
@@ -725,29 +734,29 @@
         return span;
     }
 
+    /** Colour of each status pill; "on battery" is the only solid one, with a pulsing dot. */
+    const STATUS_KINDS = { on_battery: 'danger', on_mains: 'success', bypass: 'warning', battery_test: 'info', off: 'danger', unreachable: 'default', unknown: 'default' };
+
+    /** Where the load is powered from, in plain words; the tooltip explains it and shows the UPS's own wording. */
     function statusCell(r) {
         const td = document.createElement('td');
-        if (r.on_battery === true) {
-            const pill = badge(T.ups.on_battery, 'danger', r.output ? r.output.value_formatted : '');
+        const status = r.status || { key: 'unknown', detail: null };
+        const help = (T.status_help && T.status_help[status.key]) || '';
+        const title = help + (status.detail ? ' (' + (r.output ? r.output.sensor_descr + ': ' : '') + status.detail + ')' : '');
+        const pill = badge((T.status && T.status[status.key]) || status.key, STATUS_KINDS[status.key] || 'default', title, status.key !== 'on_battery');
+        if (status.key === 'on_battery') {
             const dot = document.createElement('span');
             dot.className = 'ub-dot';
             dot.setAttribute('aria-hidden', 'true');
             pill.insertBefore(dot, pill.firstChild);
-            td.appendChild(pill);
-        } else if (r.on_battery === false) {
-            td.appendChild(badge(T.ups.on_mains, 'success', r.output ? r.output.value_formatted : '', true));
-        } else if (r.output) {
-            td.appendChild(document.createTextNode(r.output.value_formatted));
-        } else {
-            td.className = 'text-muted';
-            td.textContent = '–';
         }
+        td.appendChild(pill);
         return td;
     }
 
-    /** Battery status sensor, bad battery packs and the suspect battery verdict. */
+    /** Battery status sensor (in plain words where known), bad battery packs and the suspect battery verdict. */
     function batteryStatusCell(r) {
-        const td = sensorCell(r.battery, r.display_name);
+        const td = sensorCell(r.battery, r.display_name, false, r.battery_label ? T.battery_state[r.battery_label] : null);
         const extra = [];
         if (r.bad_packs && r.bad_packs.value > 0) {
             extra.push(badge(T.ups.bad_packs.replace(':n', fmt(r.bad_packs.value)), 'danger', r.bad_packs.sensor_descr));
@@ -1097,15 +1106,15 @@
         const columns = [
             { sort: null, label: '' },
             { sort: 'hostname', label: T.columns.hostname },
-            { sort: 'status', label: T.ups.col_status },
-            { sort: null, label: T.ups.col_attention },
-            { sort: 'runtime', label: T.ups.col_runtime, cls: 'ub-num' },
-            { sort: 'charge', label: T.ups.col_charge, cls: 'ub-num' },
-            { sort: 'load', label: T.ups.col_load, cls: 'ub-num' },
-            { sort: 'temperature', label: T.ups.col_temperature, cls: 'ub-num' },
-            { sort: null, label: T.ups.col_battery },
-            { sort: null, label: T.ups.col_self_test },
-            { sort: 'swap', label: T.ups.col_swap }
+            { sort: 'status', label: T.ups.col_status, help: T.column_help.status },
+            { sort: null, label: T.ups.col_attention, help: T.column_help.attention },
+            { sort: 'runtime', label: T.ups.col_runtime, cls: 'ub-num', help: T.column_help.runtime },
+            { sort: 'charge', label: T.ups.col_charge, cls: 'ub-num', help: T.column_help.charge },
+            { sort: 'load', label: T.ups.col_load, cls: 'ub-num', help: T.column_help.load },
+            { sort: 'temperature', label: T.ups.col_temperature, cls: 'ub-num', help: T.column_help.temperature },
+            { sort: null, label: T.ups.col_battery, help: T.column_help.battery },
+            { sort: null, label: T.ups.col_self_test, help: T.column_help.self_test },
+            { sort: 'swap', label: T.ups.col_swap, help: T.column_help.swap }
         ];
         buildHead(columns);
         renderCards(body);
@@ -1155,7 +1164,7 @@
                 tr.appendChild(td);
             });
             tr.appendChild(batteryStatusCell(r));
-            tr.appendChild(sensorCell(r.self_test, r.display_name));
+            tr.appendChild(sensorCell(r.self_test, r.display_name, false, r.self_test_label ? T.self_test_state[r.self_test_label] : null));
             tr.appendChild(swapAndInstalledCell(r, body.can_edit === true));
 
             tbody.appendChild(tr);

@@ -293,15 +293,15 @@ final class SensorReportService
             ->where('sensors.sensor_deleted', 0)
             ->where('sensors.sensor_class', 'runtime')
             ->where(function ($q): void {
-                foreach (UpsSensorKind::DATE_RUNTIME_INDEXES as $prefix) {
+                foreach ([UpsSensorKind::REPLACE_DUE_INDEX, ...UpsSensorKind::REPLACED_AT_INDEXES] as $prefix) {
                     $q->orWhere('sensors.sensor_index', 'like', $prefix.'%');
                 }
             })
             ->get();
 
-        $find = fn (string $prefix) => $dates->first(fn (Sensor $s): bool => str_starts_with((string) $s->sensor_index, $prefix));
-        $due = $find(UpsSensorKind::REPLACE_DUE_INDEX);
-        $replaced = $find(UpsSensorKind::REPLACED_AT_INDEX);
+        $kind = fn (Sensor $s): UpsSensorKind => UpsSensorKind::of('runtime', (string) $s->sensor_type, (string) $s->sensor_index, (string) $s->sensor_descr);
+        $due = $dates->first(fn (Sensor $s): bool => $kind($s) === UpsSensorKind::ReplaceDue);
+        $replaced = $dates->first(fn (Sensor $s): bool => $kind($s) === UpsSensorKind::ReplacedAt);
         $installed = $device->getAttrib(self::INSTALLED_ATTRIB);
 
         return BatterySwap::evaluate(
@@ -354,9 +354,18 @@ final class SensorReportService
             ->all();
     }
 
+    /**
+     * Whether the device is a UPS (or another battery-backed device): it has a battery charge or a remaining
+     * battery time. Uptimes, run hours and battery dates in the runtime class do not count.
+     */
     public function hasDeviceSensors(Device $device): bool
     {
-        return $this->deviceCardQuery($device)->exists();
+        return Sensor::query()
+            ->where('sensors.device_id', $device->device_id)
+            ->where('sensors.sensor_deleted', 0)
+            ->whereIn('sensors.sensor_class', ['runtime', 'charge'])
+            ->get(['sensor_class', 'sensor_type', 'sensor_index', 'sensor_descr'])
+            ->contains(fn (Sensor $s): bool => UpsSensorKind::of((string) $s->sensor_class, (string) $s->sensor_type, (string) $s->sensor_index, (string) $s->sensor_descr)->makesUps());
     }
 
     // ---- Internals ----
@@ -367,7 +376,7 @@ final class SensorReportService
             ->where('sensors.device_id', $device->device_id)
             ->where('sensors.sensor_deleted', 0)
             ->whereIn('sensors.sensor_class', self::DEVICE_CARD_CLASSES)
-            ->tap(fn ($query) => $this->withoutDateRuntimes($query));
+            ->tap(fn ($query) => $this->withoutNonRuntimes($query));
     }
 
     /**
@@ -412,18 +421,28 @@ final class SensorReportService
     }
 
     /**
-     * Leaves out the runtime sensors whose value is a date (APC battery replacement dates): they are not a
-     * runtime and would otherwise be the "shortest runtime" of the UPS.
+     * Leaves out the runtime sensors that are no remaining battery time: battery dates (APC, Eaton), time already
+     * spent on battery (UPS-MIB, Socomec, Webpower, Argus; 0 on mains) and APC InRow run hours. They would otherwise
+     * be the "shortest runtime" of the UPS. See UpsSensorKind::NOT_RUNTIME_INDEX_PATTERNS.
      */
-    private function withoutDateRuntimes(Builder $query): void
+    private function withoutNonRuntimes(Builder $query): void
     {
         $query->where(function ($w): void {
             $w->where('sensors.sensor_class', '!=', 'runtime');
-            $w->orWhereNull('sensors.sensor_index');
             $w->orWhere(function ($runtime): void {
-                foreach (UpsSensorKind::DATE_RUNTIME_INDEXES as $prefix) {
-                    $runtime->where('sensors.sensor_index', 'not like', $prefix.'%');
-                }
+                $runtime->where(function ($index): void {
+                    $index->whereNull('sensors.sensor_index');
+                    $index->orWhere(function ($patterns): void {
+                        foreach (UpsSensorKind::NOT_RUNTIME_INDEX_PATTERNS as $pattern) {
+                            $patterns->where('sensors.sensor_index', 'not like', $pattern);
+                        }
+                    });
+                });
+                $runtime->where(function ($rfc1628): void {
+                    $rfc1628->whereNull('sensors.sensor_type');
+                    $rfc1628->orWhere('sensors.sensor_type', '!=', UpsSensorKind::RFC1628_ON_BATTERY['type']);
+                    $rfc1628->orWhere('sensors.sensor_index', '!=', UpsSensorKind::RFC1628_ON_BATTERY['index']);
+                });
             });
         });
     }
@@ -439,7 +458,7 @@ final class SensorReportService
             ->join('devices', 'devices.device_id', '=', 'sensors.device_id')
             ->leftJoin('locations', 'locations.id', '=', 'devices.location_id')
             ->whereIn('sensors.sensor_class', (array) $class)
-            ->tap(fn ($query) => $this->withoutDateRuntimes($query))
+            ->tap(fn ($query) => $this->withoutNonRuntimes($query))
             ->where('sensors.sensor_deleted', 0)
             ->where('devices.disabled', 0)
             ->when($type, fn ($query) => $query->where('devices.type', $type))

@@ -99,7 +99,7 @@ const DEFAULT_ROUTES = {
         },
         rows: [
             upsRow({
-                severity: 'critical', on_battery: true, suspect: true,
+                severity: 'critical', on_battery: true, suspect: true, status: { key: 'on_battery', detail: 'onBattery' },
                 output: cell('onBattery', 'warning'),
                 bad_packs: { ...cell('1', 'critical'), value: 1 },
                 swap: { installed: '2020-01-01', due: '2024-01-01', days_left: -1011, source: 'manual', severity: 'critical', life_used: 169 },
@@ -113,7 +113,7 @@ const DEFAULT_ROUTES = {
             }),
             upsRow({
                 device_id: 2, hostname: 'ups-b', display_name: 'UPS B', device_url: '/device/2', severity: 'ok', on_battery: false,
-                runtime: cell('40 min', 'ok'), output: cell('onLine', 'ok'),
+                runtime: cell('40 min', 'ok'), output: cell('onLine', 'ok'), status: { key: 'on_mains', detail: 'onLine' },
                 swap: { installed: null, due: null, days_left: null, source: 'none', severity: 'unknown' },
             }),
         ],
@@ -149,7 +149,7 @@ const windows = [];
 after(() => { windows.forEach((window) => window.close()); });
 
 /** Opens the page with the script running. `search` is the query string of the address, e.g. "?kiosk=1". */
-async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0, defaultView = undefined } = {}) {
+async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0, defaultView = undefined, texts = {} } = {}) {
     const config = {
         defaults: { type: 'power', class: 'runtime', limit: 25 },
         initial,
@@ -162,7 +162,7 @@ async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0
             views: '/plugin/ups-battery/views', saveView: '/plugin/ups-battery/views', deleteView: '/plugin/ups-battery/views/delete',
             ups: '/plugin/ups-battery/ups', battery: '/plugin/ups-battery/battery',
         },
-        i18n: stubTexts(),
+        i18n: { ...stubTexts(), ...texts },
     };
 
     const dom = new JSDOM(pageHtml(config), { url: ORIGIN + PAGE + search, runScripts: 'outside-only', pretendToBeVisual: true });
@@ -502,7 +502,7 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     assert.ok(second.classList.contains('ub-sev-ok'));
     assert.equal(cells(first)[1].querySelector('a').textContent, 'UPS A');
     assert.equal(cells(first)[1].querySelector('small').textContent, 'Site A', 'the location sits under the hostname');
-    assert.equal(cells(first)[2].querySelector('.label-danger').textContent, 'ups.on_battery');
+    assert.equal(cells(first)[2].querySelector('.label-danger').textContent, 'on_battery');
     assert.ok(cells(first)[4].classList.contains('danger'), 'runtime cell is red');
     assert.ok(cells(first)[8].textContent.includes('ups.bad_packs'));
     assert.ok(cells(first)[8].textContent.includes('suspect.yes'));
@@ -510,7 +510,7 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     assert.ok(cells(first)[10].classList.contains('danger'));
     assert.equal(cells(first)[10].querySelector('.ub-sub').textContent, 'ups.col_installed: 2020-01-01', 'the install date sits under the swap date');
     assert.equal(cells(first).length, 11);
-    assert.equal(cells(second)[2].querySelector('.label-success').textContent, 'ups.on_mains');
+    assert.equal(cells(second)[2].querySelector('.label-success').textContent, 'on_mains');
     assert.ok(cells(second)[10].textContent.startsWith('–'));
 });
 
@@ -799,4 +799,72 @@ test('UPS overview: timeline months inside the warning window are marked, empty 
     assert.ok(cols[2].classList.contains('ub-tl-soon'), 'about two months away, inside 90 days');
     assert.ok(!cols[5].classList.contains('ub-tl-soon'), 'about five months away');
     assert.ok(cols[0].classList.contains('ub-tl-empty'));
+});
+
+// ---- clear wording ----
+
+const WORDING = {
+    status: { on_battery: 'On battery', on_mains: 'On mains', unknown: 'Unknown' },
+    status_help: { on_battery: 'The mains supply is gone and the load runs on the battery.', on_mains: 'The load is powered from the mains; the battery is standing by.', unknown: 'The UPS does not report where the load is powered from.' },
+    battery_state: { ok: 'OK', replace: 'Replace battery' },
+    self_test_state: { passed: 'Passed', failed: 'Failed' },
+    issues: { runtime_low: 'Runtime low: :value', swap_overdue: 'Battery swap overdue by :n days', on_battery: 'Running on battery', more: '+:n more' },
+    column_help: { status: 'Where the load is powered from', attention: 'Why this UPS needs a look' },
+};
+
+function wordedRoute(url) {
+    const body = DEFAULT_ROUTES['/plugin/ups-battery/ups'](url);
+    const first = {
+        ...body.rows[0],
+        battery: cell('batteryNeedsReplacing', 'critical'), battery_label: 'replace',
+        self_test: cell('failed', 'critical'), self_test_label: 'failed',
+        issues: [
+            { key: 'on_battery', severity: 'critical', n: null, value: null },
+            { key: 'runtime_low', severity: 'critical', n: null, value: '4 min' },
+            { key: 'swap_overdue', severity: 'critical', n: 1011, value: null },
+        ],
+    };
+    const second = { ...body.rows[1], status: { key: 'unknown', detail: null }, output: null };
+    return { ...body, rows: [first, second] };
+}
+
+test('UPS overview: the status column says where the load is powered from, and explains it', async () => {
+    const page = await boot({ defaultView: 'ups', texts: WORDING, routes: { '/plugin/ups-battery/ups': wordedRoute } });
+    const [first, second] = page.rows();
+    const onBattery = first.children[2].querySelector('.ub-pill');
+    const unknown = second.children[2].querySelector('.ub-pill');
+
+    assert.equal(onBattery.textContent, 'On battery');
+    assert.ok(onBattery.title.startsWith('The mains supply is gone'));
+    assert.ok(onBattery.title.includes('onBattery'), 'the UPS wording is in the tooltip');
+    assert.equal(unknown.textContent, 'Unknown');
+    assert.ok(unknown.classList.contains('label-default'));
+});
+
+test('UPS overview: attention messages are sentences with the value', async () => {
+    const page = await boot({ defaultView: 'ups', texts: WORDING, routes: { '/plugin/ups-battery/ups': wordedRoute } });
+    const badges = [...page.rows()[0].children[3].querySelectorAll('.label')].map((b) => b.textContent);
+
+    assert.deepEqual(badges, ['Running on battery', 'Runtime low: 4 min', 'Battery swap overdue by 1011 days']);
+});
+
+test('UPS overview: battery and self-test show plain words, the vendor text stays in the tooltip', async () => {
+    const page = await boot({ defaultView: 'ups', texts: WORDING, routes: { '/plugin/ups-battery/ups': wordedRoute } });
+    const first = page.rows()[0];
+    const battery = first.children[8].querySelector('a');
+    const selfTest = first.children[9].querySelector('a');
+
+    assert.equal(battery.textContent, 'Replace battery');
+    assert.ok(battery.title.endsWith('batteryNeedsReplacing'));
+    assert.equal(selfTest.textContent, 'Failed');
+    assert.ok(selfTest.title.endsWith('failed'));
+});
+
+test('UPS overview: column headers explain what they show', async () => {
+    const page = await boot({ defaultView: 'ups', texts: WORDING });
+    const heads = [...page.document.querySelectorAll('#ub-head th')];
+
+    assert.equal(heads[2].title, 'Where the load is powered from');
+    assert.ok(heads[2].classList.contains('ub-help'));
+    assert.equal(heads[3].title, 'Why this UPS needs a look');
 });

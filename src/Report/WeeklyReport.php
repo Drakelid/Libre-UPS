@@ -161,6 +161,45 @@ final class WeeklyReport
     }
 
     /**
+     * The runtime of every UPS that has one, shortest first.
+     *
+     * @param  UpsRow[]  $rows
+     * @return ReportRow[]
+     */
+    public static function runtimeRows(array $rows): array
+    {
+        $runtimes = [];
+        foreach ($rows as $row) {
+            if ($row->runtime !== null) {
+                $runtimes[] = $row->runtime;
+            }
+        }
+
+        usort($runtimes, fn (ReportRow $a, ReportRow $b): int => [$a->value === null, $a->value, $a->hostname] <=> [$b->value === null, $b->value, $b->hostname]);
+
+        return $runtimes;
+    }
+
+    /**
+     * The UPSs with a suspect battery, as rows for the suspect table (runtime, load and charge).
+     *
+     * @param  UpsRow[]  $rows
+     * @return MatrixRow[]
+     */
+    public static function suspectRows(array $rows): array
+    {
+        $suspect = [];
+        foreach ($rows as $row) {
+            if ($row->suspect === true) {
+                $cells = array_filter(['runtime' => $row->runtime, 'load' => $row->load, 'charge' => $row->charge], fn (?ReportRow $cell): bool => $cell !== null);
+                $suspect[] = new MatrixRow($row->deviceId, $row->hostname, $row->displayName, $row->deviceUrl, $row->location, $row->os, $row->deviceUp, $cells, true);
+            }
+        }
+
+        return $suspect;
+    }
+
+    /**
      * UPSs whose battery swap is overdue or due within $warnDays days, soonest first.
      *
      * @param  UpsRow[]  $rows

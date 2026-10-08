@@ -778,3 +778,11 @@ Dager igjen ≤ 0 er kritisk, ≤ varselvinduet (innstilling, standard 90 dager)
 - Nytt kort «Unreachable» (enheten er nede i LibreNMS); en utilgjengelig UPS regnes som varsel.
 - Tidslinje over batteribytter per måned de neste 12 månedene (`cards.swap_timeline`).
 - Stolper for lading, last og andel brukt batterilevetid (`swap.life_used`, kjent når monteringsdatoen er kjent).
+
+### 15.7 Kompatibilitet med alle UPS-OS i LibreNMS
+
+- Klassifiseringen (`UpsSensorKind`) er kontrollert mot sensordefinisjonene for alle UPS-OS i LibreNMS (os_discovery og includes/discovery/sensors). Testene i `tests/Unit/UpsCompatibilityTest.php` har ett tilfelle per produsent med sensornavnene fra LibreNMS.
+- En enhet er en UPS når den har batterilading eller gjenværende batteritid (eller rapporterer batteridatoer). Oppetid, feiltellere og driftstimer i runtime-klassen gjør ikke en enhet til UPS.
+- Runtime-sensorer som ikke er gjenværende batteritid utelates fra alle runtime-rapporter (`NOT_RUNTIME_INDEX_PATTERNS` og UPS-MIB «Time on battery», type `rfc1628`, indeks `100`). Tid på batteri over 0 betyr at UPS-en går på batteri.
+- «På batteri» avgjøres av utgangsstatus (tekst, eller navnet for True/False-flagg fra NUT), ellers av tid på batteri, ellers av en batteristatus som sier «discharging».
+- Ukerapporten bygges fra UPS-oversikten.

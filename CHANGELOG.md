@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.4] - 2026-10-08
+
+### Fixed
+
+Checked against the sensor definitions of every UPS OS in LibreNMS:
+
+- UPSs on the standard UPS-MIB (RFC 1628: ABB, Delta, Eaton Network-M2, GE, HPE, Huawei, Liebert, Riello NetMan, Tripp Lite, Webpower and others) showed a runtime of 0 minutes and a suspect battery: LibreNMS' "Time on battery" counter (0 on mains) was taken as the runtime. The same for Socomec, Webpower, Argus and LogMaster ("seconds/minutes on battery"). These counters are no longer a runtime anywhere in the plugin; above 0 they mean the UPS is on battery.
+- Devices with uptimes, error counters or filter and fan run hours in the runtime class (routers, APC InRow cooling units) appeared as UPSs in the UPS overview, on their device page and in the weekly email. A device now needs a battery charge or a remaining battery time.
+- "On battery" was not recognised for NUT (True/False flags), PowerWalker (system status) and Imcopower (power state), and Vertiv's "on Utility and Battery" was wrongly read as on battery. Eaton XUPS UPSs, which have no output source sensor, count as on battery while the battery is discharging.
+- Battery and self-test states of CyberPower, NetAgent, Socomec, Webpower, Eaton XUPS, ALGcom and NUT are recognised; NUT flags show their name ("UPS low battery") instead of "True".
+- Eaton Network-M2's "Last battery replacement" is used for the battery swap and left out of the runtimes.
+
+### Changed
+
+- The weekly email takes its runtime, suspect battery and swap tables from the UPS overview, so it lists the same UPSs as the page.
+- Clearer wording in the UPS overview:
+  - *Status* is always one plain label (On mains, On battery, On bypass, Battery test, Output off, Unreachable, Unknown) with a tooltip that explains it and shows the UPS's own wording.
+  - *Attention* shows sentences with the value, for example "Runtime low: 8 min", "Load high: 92 %", "Battery needs replacing", "Last self-test failed", "Battery swap overdue by 30 days" and "Battery may be worn: short runtime although the load is low". Issue keys in the JSON and CSV are more specific (`runtime_low`, `load_high`, `battery_replace`, `self_test_failed`, `swap_today`, ...) and carry the `value`.
+  - *Battery* and *Self-test* show plain words (Replace battery, Low, Discharging, Fault, Passed, Failed, Not run, ...) instead of vendor codes such as `noBatteryNeedsReplacing`; the vendor text stays in the tooltip and in the JSON (`battery_label`, `self_test_label`).
+  - Column headers have a tooltip that explains what they show.
+
 ## [1.3.3] - 2026-10-08
 
 ### Changed

@@ -85,6 +85,7 @@
     #ups-battery .ub-tl-col:first-child .ub-tl-label { font-weight: 700; opacity: 1; }
 
     /* ---- table ---- */
+    #ups-battery #ub-table > thead > tr > th.ub-help { cursor: help; text-decoration: underline dotted rgba(127, 127, 127, .6); text-underline-offset: 3px; }
     #ups-battery #ub-table > thead > tr > th {
         white-space: nowrap; font-size: .78em; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .85;
         border-bottom: 2px solid var(--ub-line); vertical-align: bottom;

@@ -73,10 +73,13 @@ final readonly class ReportRow
 
     public function withSeverity(Severity $severity): self
     {
-        $values = get_object_vars($this);
-        $values['severity'] = $severity;
+        return $this->with(['severity' => $severity]);
+    }
 
-        return new self(...$values);
+    /** @param  array<string, mixed>  $changes  Constructor arguments by name. */
+    public function with(array $changes): self
+    {
+        return new self(...array_merge(get_object_vars($this), $changes));
     }
 
     /** @return array<string, mixed> */

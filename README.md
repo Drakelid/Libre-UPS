@@ -187,6 +187,25 @@ Most UPS batteries (VRLA) last three to five years; set the lifetime to what the
 
 The other columns of the UPS overview come from the sensors LibreNMS has discovered: the *Status* column from the output source state ("On battery"/"On mains"), *Battery* from the battery status or replace-battery indicator plus the bad battery pack count, *Self-test* from the diagnostics result. These are known for APC and the standard UPS-MIB; for other vendors they are recognised by the sensor name. LibreNMS does not store the date of the last self-test, so only its result is shown.
 
+### Supported UPSs
+
+The plugin reads the sensors LibreNMS discovers, so any UPS that LibreNMS monitors with a battery charge or a remaining battery time shows up. The sensor names of every UPS OS in LibreNMS were checked, and these are recognised in particular:
+
+| LibreNMS OS | Status / on battery | Battery status | Self-test | Battery dates |
+| --- | --- | --- | --- | --- |
+| `apc` | output status | replace indicator | diagnostics result | recommended and last replacement |
+| Standard UPS-MIB (RFC 1628): `abbups`, `apc-mgeups`, `dell-ups`, `deltaups`, `eaton-mgeups`, `eatonupsm2`, `ge-ups`, `generex-ups`, `hpe-rtups`, `huaweiups`, `liebert`, `marathonups`, `netmanplus`, `orvaldi-ups`, `poweralert`, `webpower`, ... | output source, or time on battery | battery status | test result | `eatonupsm2`: last replacement |
+| `eaton-mgeups`, `apc-mgeups` | on battery / on input power | | | |
+| `eatonups` (XUPS-MIB) | battery discharging | battery status | battery test | |
+| `cyberpower`, `netagent2` | output status | battery status, replace indicator | | |
+| `socomec-ups`, `vertiv-ita2` | output source | battery status | | |
+| `powerwalker` | system status | | | |
+| `webpower-smart2` | time on battery | battery group status | battery test | |
+| `algcom-dc-ups`, `imcopower-*`, `eltek-webpower`, `enexus` and other DC power systems | operation mode / power state | battery and charger states | | |
+| Linux/Unix host with NUT (`ups-nut` SNMP extend) | on battery / on line flags | low battery, replace battery flags | | |
+
+Other vendors' state sensors are recognised by their names (battery, output source, self-test). Runtime-class sensors that are not a remaining battery time (time already spent on battery, battery dates, uptimes, filter and fan run hours) are not used as runtime, so routers, cooling units and similar devices do not appear as UPSs. If a UPS is missing or a column stays empty, run `scripts/verify.sh` and check which sensors LibreNMS has discovered for it.
+
 ### Suspect batteries
 
 A short runtime is normal at high load or while the battery is still charging. It is suspicious when the UPS is lightly loaded and fully charged, because then the battery itself is the likely cause. A battery is flagged when

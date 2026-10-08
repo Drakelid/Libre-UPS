@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Drakelid\UpsBattery\Console;
 
-use Drakelid\UpsBattery\Report\MatrixFilters;
 use Drakelid\UpsBattery\Report\PluginSettings;
-use Drakelid\UpsBattery\Report\ReportFilters;
 use Drakelid\UpsBattery\Report\ReportSchedule;
 use Drakelid\UpsBattery\Report\SensorReportService;
 use Drakelid\UpsBattery\Report\UpsFilters;
@@ -53,20 +51,9 @@ class SendReport extends Command
         }
 
         try {
-            $defaults = $settings->filterDefaults();
-
-            $runtime = $service->report(
-                null,
-                ReportFilters::fromArray(['class' => 'runtime', 'aggregate' => 'min', 'limit' => (string) $settings->report->top], $defaults),
-                $settings->thresholds,
-            );
-            $suspect = $service->matrix(
-                null,
-                MatrixFilters::fromArray(['classes' => 'runtime,load,charge', 'suspect' => '1', 'limit' => '0'], $defaults),
-                $settings->thresholds,
-                $settings->suspectRule,
-            );
-            $ups = $service->ups(null, UpsFilters::fromArray(['sort' => 'swap', 'limit' => '0'], $defaults), $settings);
+            // Everything comes from the UPS overview, so the email lists the same UPSs as the page: devices with
+            // uptimes or run hours in the runtime class (routers, coolers) are not UPSs.
+            $ups = $service->ups(null, UpsFilters::fromArray(['sort' => 'runtime', 'limit' => '0'], $settings->filterDefaults()), $settings);
         } catch (InvalidArgumentException $e) {
             // Typically: the device type or metric in the plugin settings does not exist (any more).
             $this->error('Could not build the report: '.$e->getMessage());
@@ -79,7 +66,9 @@ class SendReport extends Command
             return self::FAILURE;
         }
 
-        $counts = WeeklyReport::countRuntime($runtime['summaryRows']) + ['suspect' => count($suspect['rows'])];
+        $runtimes = WeeklyReport::runtimeRows($ups['rows']);
+        $suspect = WeeklyReport::suspectRows($ups['rows']);
+        $counts = WeeklyReport::countRuntime($runtimes) + ['suspect' => count($suspect)];
         $origin = $this->origin();
         $html = WeeklyReport::html(
             $t,
@@ -87,8 +76,8 @@ class SendReport extends Command
             $origin.Urls::relative(route('ups-battery.report')),
             now()->format('Y-m-d H:i'),
             $counts,
-            $runtime['rows'],
-            $suspect['rows'],
+            array_slice($runtimes, 0, $settings->report->top),
+            $suspect,
             WeeklyReport::swapsDue($ups['rows'], $settings->swapWarnDays),
             $settings->swapWarnDays,
         );

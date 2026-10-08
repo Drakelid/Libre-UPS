@@ -80,7 +80,9 @@ final class UpsBuilder
         $replaceDue = $pick(UpsSensorKind::ReplaceDue, 'min');
         $replacedAt = $pick(UpsSensorKind::ReplacedAt, 'first');
 
-        if ($runtime === null && $charge === null && $battery === null && $replaceDue === null && $replacedAt === null) {
+        // A UPS has a battery charge or a remaining battery time (or reports its battery dates). Uptimes, run hours
+        // and "battery" states alone (routers, coolers, servers) do not make a device a UPS.
+        if ($runtime === null && $charge === null && $replaceDue === null && $replacedAt === null) {
             return null;
         }
 
@@ -90,7 +92,7 @@ final class UpsBuilder
         $output = $pick(UpsSensorKind::OutputState, 'worst');
         $selfTest = $pick(UpsSensorKind::SelfTestState, 'worst');
 
-        $onBattery = $output === null ? null : UpsSensorKind::meansOnBattery($output->valueFormatted);
+        $onBattery = self::onBattery($output, $pick(UpsSensorKind::OnBatteryTime, 'max'), $battery);
         $suspect = SuspectBattery::evaluate($this->rule, $runtime?->value, $load?->value, $charge?->value);
         $swap = BatterySwap::evaluate(
             $installed,
@@ -156,18 +158,19 @@ final class UpsBuilder
     }
 
     /**
-     * Why a UPS needs attention, most severe first. "n" is a number for the text: days overdue or left,
-     * or the number of bad battery packs.
+     * Why a UPS needs attention, most severe first, as keys the page turns into a sentence ("issues.<key>").
+     * "n" is a number for the sentence (days, bad packs), "value" the reading or vendor text it is about.
      *
-     * @param  array<string, ReportRow|null>  $cells  Keyed by issue key.
-     * @return array<int, array{key: string, severity: string, n: int|null}>
+     * @param  array<string, ReportRow|null>  $cells  runtime, charge, load, temperature, battery, self_test.
+     * @return array<int, array{key: string, severity: string, n: int|null, value: string|null}>
      */
     public static function issues(bool $deviceUp, ?bool $onBattery, ?bool $suspect, BatterySwap $swap, array $cells, ?ReportRow $badPacks): array
     {
         $issues = [];
-        $add = function (string $key, Severity $severity, ?int $n = null) use (&$issues): void {
-            $issues[] = ['key' => $key, 'severity' => $severity->value, 'n' => $n];
+        $add = function (string $key, Severity $severity, ?int $n = null, ?string $value = null) use (&$issues): void {
+            $issues[] = ['key' => $key, 'severity' => $severity->value, 'n' => $n, 'value' => $value];
         };
+        $problem = fn (?ReportRow $cell): bool => $cell !== null && ($cell->severity === Severity::Warning || $cell->severity === Severity::Critical);
 
         if ($onBattery === true) {
             $add('on_battery', Severity::Critical);
@@ -177,10 +180,25 @@ final class UpsBuilder
             $add('down', Severity::Warning);
         }
 
-        foreach ($cells as $key => $cell) {
-            if ($cell !== null && ($cell->severity === Severity::Warning || $cell->severity === Severity::Critical)) {
-                $add($key, $cell->severity);
+        // Readings: "Runtime low: 8 min", "Load high: 92 %"
+        foreach (['runtime', 'charge', 'load', 'temperature'] as $metric) {
+            $cell = $cells[$metric] ?? null;
+            if ($problem($cell)) {
+                $add($metric.'_'.UpsLabels::direction($cell), $cell->severity, null, $cell->valueFormatted);
             }
+        }
+
+        // States: a plain sentence where the wording is known, else the vendor text
+        $battery = $cells['battery'] ?? null;
+        if ($problem($battery)) {
+            $label = UpsLabels::battery($battery->valueFormatted);
+            $known = in_array($label, ['replace', 'low', 'depleted', 'discharging', 'disconnected', 'fault'], true);
+            $add($known ? 'battery_'.$label : 'battery', $battery->severity, null, $battery->valueFormatted);
+        }
+
+        $selfTest = $cells['self_test'] ?? null;
+        if ($problem($selfTest)) {
+            $add(UpsLabels::selfTest($selfTest->valueFormatted) === 'failed' ? 'self_test_failed' : 'self_test', $selfTest->severity, null, $selfTest->valueFormatted);
         }
 
         if (($badPacks?->value ?? 0) > 0) {
@@ -192,7 +210,9 @@ final class UpsBuilder
         }
 
         if ($swap->daysLeft !== null && $swap->severity === Severity::Critical) {
-            $add('swap_overdue', Severity::Critical, -$swap->daysLeft);
+            $swap->daysLeft === 0
+                ? $add('swap_today', Severity::Critical)
+                : $add('swap_overdue', Severity::Critical, -$swap->daysLeft);
         } elseif ($swap->daysLeft !== null && $swap->severity === Severity::Warning) {
             $add('swap_due', Severity::Warning, $swap->daysLeft);
         }
@@ -201,6 +221,30 @@ final class UpsBuilder
         usort($issues, fn (array $a, array $b): int => Severity::from($b['severity'])->rank() <=> Severity::from($a['severity'])->rank());
 
         return $issues;
+    }
+
+    /**
+     * Whether the UPS runs on battery, from (in this order) the output state, the time-on-battery counter
+     * (above 0 only while on battery) or a battery state that says the battery is discharging (Eaton XUPS, NUT).
+     */
+    public static function onBattery(?ReportRow $output, ?ReportRow $onBatteryTime, ?ReportRow $battery): ?bool
+    {
+        if ($output !== null) {
+            $verdict = UpsSensorKind::meansOnBattery($output->valueFormatted, $output->sensorType.' '.$output->sensorDescr);
+            if ($verdict !== null) {
+                return $verdict;
+            }
+        }
+
+        if ($onBatteryTime?->value !== null) {
+            return $onBatteryTime->value > 0;
+        }
+
+        if ($battery !== null && str_contains(strtolower($battery->valueFormatted), 'discharg')) {
+            return true;
+        }
+
+        return null;
     }
 
     /** Whether a summary card counts the UPS; the same test filters the table when the card is clicked. */
@@ -290,6 +334,11 @@ final class UpsBuilder
      */
     private function adjust(UpsSensorKind $kind, ReportRow $sensor): ReportRow
     {
+        // NUT reports flags such as "UPS low battery: True"; the cell shows the flag's name when it is set.
+        if (($kind === UpsSensorKind::BatteryState || $kind === UpsSensorKind::SelfTestState) && UpsSensorKind::isFlagText($sensor->valueFormatted)) {
+            $sensor = $sensor->with(['valueFormatted' => strtolower(trim($sensor->valueFormatted)) === 'true' ? $sensor->sensorDescr : 'OK']);
+        }
+
         if ($kind === UpsSensorKind::SelfTestState && $sensor->severity === Severity::Unknown
             && str_contains(strtolower($sensor->valueFormatted), 'fail')) {
             return $sensor->withSeverity(Severity::Critical);
