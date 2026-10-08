@@ -11,6 +11,8 @@ final readonly class UpsRow
      * @param  ReportRow[]  $sensors  All sensors of the UPS, for the details.
      * @param  bool|null  $onBattery  From the output state sensor; null without one.
      * @param  bool|null  $suspect  Suspect battery verdict; null without runtime or load.
+     * @param  array<int, array{key: string, severity: string, n: int|null}>  $issues  Why the UPS needs attention,
+     *                                                                                 most severe first (see UpsBuilder::issues).
      */
     public function __construct(
         public int $deviceId,
@@ -33,6 +35,7 @@ final readonly class UpsRow
         public ?bool $suspect,
         public BatterySwap $swap,
         public array $sensors,
+        public array $issues = [],
     ) {}
 
     /** True when anything about the UPS needs a look. */
@@ -67,6 +70,7 @@ final readonly class UpsRow
             'output' => self::cell($this->output),
             'self_test' => self::cell($this->selfTest),
             'swap' => $this->swap->toArray(),
+            'issues' => $this->issues,
             'sensors' => array_map(fn (ReportRow $sensor): array => [
                 'class' => $sensor->sensorClass,
                 'label' => $classLabel($sensor->sensorClass),

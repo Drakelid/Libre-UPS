@@ -12,10 +12,16 @@ final readonly class UpsFilters
     /** "status" sorts by the worst problem of the UPS, "swap" by the days left until the battery swap. */
     public const SORTS = ['status', 'hostname', 'location', 'runtime', 'charge', 'load', 'temperature', 'swap'];
 
+    /** Summary cards that can be clicked to show only those UPSs. */
+    public const FOCUS = ['on_battery', 'overdue', 'due', 'alarm', 'unknown', 'down'];
+
     /** Direction used when only the column is given: the most urgent rows first. */
     private const DEFAULT_DIRECTIONS = ['status' => 'desc', 'load' => 'desc', 'temperature' => 'desc'];
 
-    /** @param  bool  $attention  Only UPSs with a problem (any warning or critical value, on battery, swap due). */
+    /**
+     * @param  bool  $attention  Only UPSs with a problem (any warning or critical value, on battery, swap due).
+     * @param  string|null  $focus  Only the UPSs one summary card counts, see FOCUS.
+     */
     public function __construct(
         public ?string $type,
         public ?string $os,
@@ -25,6 +31,7 @@ final readonly class UpsFilters
         public string $dir,
         public int $limit,
         public bool $attention = false,
+        public ?string $focus = null,
     ) {}
 
     /**
@@ -58,6 +65,11 @@ final readonly class UpsFilters
             }
         }
 
+        $focus = InputParser::nullableString($input['focus'] ?? null, 'focus');
+        if ($focus !== null && ! in_array($focus, self::FOCUS, true)) {
+            throw new InvalidArgumentException("Invalid focus \"$focus\".");
+        }
+
         return new self(
             $type,
             $os,
@@ -67,6 +79,7 @@ final readonly class UpsFilters
             $dir,
             InputParser::parseLimit($input['limit'] ?? null, $defaults['limit'] ?? null),
             InputParser::parseFlag($input['attention'] ?? null),
+            $focus,
         );
     }
 
@@ -82,6 +95,7 @@ final readonly class UpsFilters
             'dir' => $this->dir,
             'limit' => $this->limit,
             'attention' => $this->attention,
+            'focus' => $this->focus,
         ];
     }
 }

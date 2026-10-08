@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-10-08
+
+### Added
+
+- **Attention column** in the UPS overview: why a UPS is yellow or red, as badges ("On battery", "Swap overdue 30 d", "2 bad packs", "Self-test", "Unreachable", ...), most severe first, with the full list in the tooltip. The JSON rows carry `issues` (`key`, `severity`, `n`), the CSV an `issues` column.
+- **Clickable summary cards:** a click on "On battery", "Battery swap overdue", "Swap within … days", "Battery problems", "Unreachable" or "No swap date" shows only those UPSs (`focus` parameter, kept in the address and in saved views); a second click or the "UPSs" card shows all again.
+- **Unreachable** card: UPSs whose device is down in LibreNMS. Such a UPS now counts as a warning, because its values are as old as the last poll.
+- **Battery swap timeline:** bars for the battery swaps due in each of the next 12 months (`cards.swap_timeline`), to plan battery orders.
+- **Bars** for charge and load, and for the share of the battery life that has passed (`swap.life_used`, also in the CSV as `battery_life_used`).
+
 ## [1.2.0] - 2026-10-08
 
 ### Added

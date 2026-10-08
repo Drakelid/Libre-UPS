@@ -770,3 +770,11 @@ Dager igjen ≤ 0 er kritisk, ≤ varselvinduet (innstilling, standard 90 dager)
 - [ ] En bruker uten tillatelse til å oppdatere enheter ser ikke blyanten og får 403 fra endepunktet.
 - [ ] En UPS på batteri er rød og telles i kortet «On battery».
 - [ ] Raden åpnes og viser inn-/utgangsspenning, frekvens o.l. gruppert per sensorklasse.
+
+### 15.6 Innsikt i UPS-oversikten
+
+- Kolonnen «Attention» viser hvorfor en UPS er gul eller rød (`issues`: `on_battery`, `down`, `runtime`, `charge`, `load`, `temperature`, `battery`, `self_test`, `bad_packs`, `suspect`, `swap_overdue`, `swap_due`), mest alvorlig først, maks tre merker og resten i verktøytipset.
+- Oppsummeringskortene kan klikkes og filtrerer tabellen (`focus`: `on_battery`, `overdue`, `due`, `alarm`, `unknown`, `down`). Kortene telles alltid over alle UPS-er som passer de øvrige filtrene.
+- Nytt kort «Unreachable» (enheten er nede i LibreNMS); en utilgjengelig UPS regnes som varsel.
+- Tidslinje over batteribytter per måned de neste 12 månedene (`cards.swap_timeline`).
+- Stolper for lading, last og andel brukt batterilevetid (`swap.life_used`, kjent når monteringsdatoen er kjent).

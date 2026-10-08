@@ -84,13 +84,25 @@ const DEFAULT_ROUTES = {
         warn_days: 90,
         lifetime_months: 48,
         can_edit: true,
-        cards: { devices: 2, on_battery: 1, swap_overdue: 1, swap_due: 0, swap_unknown: 1, battery_alarm: 1, lowest_runtime: { display_name: 'UPS A', device_url: '/device/1', value_formatted: '4 min' } },
+        cards: {
+            devices: 2, on_battery: 1, swap_overdue: 1, swap_due: 0, swap_unknown: 1, battery_alarm: 1, down: 0,
+            lowest_runtime: { display_name: 'UPS A', device_url: '/device/1', value_formatted: '4 min' },
+            swap_timeline: ['2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08', '2027-09']
+                .map((month, i) => ({ month, count: i === 2 ? 3 : (i === 5 ? 1 : 0) })),
+        },
         rows: [
             upsRow({
                 severity: 'critical', on_battery: true, suspect: true,
                 output: cell('onBattery', 'warning'),
                 bad_packs: { ...cell('1', 'critical'), value: 1 },
-                swap: { installed: '2020-01-01', due: '2024-01-01', days_left: -1011, source: 'manual', severity: 'critical' },
+                swap: { installed: '2020-01-01', due: '2024-01-01', days_left: -1011, source: 'manual', severity: 'critical', life_used: 169 },
+                issues: [
+                    { key: 'on_battery', severity: 'critical', n: null },
+                    { key: 'bad_packs', severity: 'critical', n: 1 },
+                    { key: 'swap_overdue', severity: 'critical', n: 1011 },
+                    { key: 'runtime', severity: 'critical', n: null },
+                    { key: 'suspect', severity: 'warning', n: null },
+                ],
             }),
             upsRow({
                 device_id: 2, hostname: 'ups-b', display_name: 'UPS B', device_url: '/device/2', severity: 'ok', on_battery: false,
@@ -108,7 +120,8 @@ function upsRow(overrides = {}) {
         severity: 'ok', on_battery: null, suspect: false,
         runtime: cell('4 min', 'critical'), charge: cell('100 %', 'ok'), load: cell('10 %', 'ok'), temperature: cell('31 °C', 'warning'),
         battery: cell('noBatteryNeedsReplacing', 'ok'), bad_packs: null, output: null, self_test: cell('ok', 'ok'),
-        swap: { installed: null, due: null, days_left: null, source: 'none', severity: 'unknown' },
+        swap: { installed: null, due: null, days_left: null, source: 'none', severity: 'unknown', life_used: null },
+        issues: [],
         sensors: [
             { class: 'voltage', label: 'Voltage', sensor_descr: 'Input', value_formatted: '230 V', severity: 'ok', sensor_url: '/s/1', graph_url: '/g/1' },
             { class: 'voltage', label: 'Voltage', sensor_descr: 'Output', value_formatted: '229 V', severity: 'ok', sensor_url: '/s/2', graph_url: '/g/2' },
@@ -464,11 +477,11 @@ test('UPS overview: shows the summary cards', async () => {
     const page = await boot({ defaultView: 'ups' });
     const cards = [...page.document.querySelectorAll('#ub-cards .ub-card')];
 
-    assert.equal(cards.length, 7);
+    assert.equal(cards.length, 8);
     assert.equal(cards[0].querySelector('.ub-card-value').textContent, '2');
     assert.ok(cards[1].classList.contains('ub-danger'), 'on battery is red');
     assert.ok(!cards[3].classList.contains('ub-warn'), 'nothing due within the window');
-    assert.equal(cards[6].querySelector('a').getAttribute('href'), ORIGIN + '/device/1');
+    assert.equal(cards[7].querySelector('a').getAttribute('href'), ORIGIN + '/device/1');
 });
 
 test('UPS overview: one row per UPS with power, battery and swap data', async () => {
@@ -480,14 +493,14 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     assert.ok(first.classList.contains('danger'));
     assert.equal(cells(first)[1].textContent, 'UPS A');
     assert.equal(cells(first)[3].querySelector('.label-danger').textContent, 'ups.on_battery');
-    assert.ok(cells(first)[4].classList.contains('danger'), 'runtime cell is red');
-    assert.ok(cells(first)[8].textContent.includes('ups.bad_packs'));
-    assert.ok(cells(first)[8].textContent.includes('suspect.yes'));
-    assert.ok(cells(first)[10].textContent.startsWith('2020-01-01'));
-    assert.ok(cells(first)[11].textContent.startsWith('2024-01-01'));
-    assert.ok(cells(first)[11].classList.contains('danger'));
+    assert.ok(cells(first)[5].classList.contains('danger'), 'runtime cell is red');
+    assert.ok(cells(first)[9].textContent.includes('ups.bad_packs'));
+    assert.ok(cells(first)[9].textContent.includes('suspect.yes'));
+    assert.ok(cells(first)[11].textContent.startsWith('2020-01-01'));
+    assert.ok(cells(first)[12].textContent.startsWith('2024-01-01'));
+    assert.ok(cells(first)[12].classList.contains('danger'));
     assert.equal(cells(second)[3].querySelector('.label-success').textContent, 'ups.on_mains');
-    assert.equal(cells(second)[11].textContent, '–');
+    assert.equal(cells(second)[12].textContent, '–');
 });
 
 test('UPS overview: a row opens to show all sensors grouped by class', async () => {
@@ -572,4 +585,94 @@ test('UPS overview: switching views keeps working', async () => {
     await wait();
     assert.equal(page.$('ub-cards').style.display, '');
     assert.equal(page.rows().length, 2);
+});
+
+// ---- UPS overview: insight ----
+
+test('UPS overview: a summary card filters the table and a second click shows all again', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const overdue = () => page.document.querySelector('#ub-cards [data-focus="overdue"]');
+
+    assert.equal(overdue().getAttribute('role'), 'button');
+    overdue().click();
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('focus'), 'overdue');
+    assert.equal(overdue().getAttribute('aria-pressed'), 'true');
+    assert.ok(overdue().classList.contains('ub-active'));
+    assert.equal(new URL(page.window.location.href).searchParams.get('focus'), 'overdue');
+
+    overdue().click();
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('focus'), null);
+    assert.equal(overdue().getAttribute('aria-pressed'), 'false');
+});
+
+test('UPS overview: the "UPSs" card clears the card filter, and the keyboard works too', async () => {
+    const page = await boot({ defaultView: 'ups', search: '?view=ups&focus=down', initial: { view: 'ups', focus: 'down' } });
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('focus'), 'down');
+
+    page.document.querySelector('#ub-cards [data-focus=""]').dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('focus'), null);
+});
+
+test('UPS overview: an unknown card filter in the address is ignored', async () => {
+    const page = await boot({ defaultView: 'ups', search: '?view=ups&focus=everything', initial: { view: 'ups', focus: 'everything' } });
+
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('focus'), null);
+});
+
+test('UPS overview: the timeline shows the battery swaps per month', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const cols = [...page.document.querySelectorAll('#ub-timeline .ub-tl-col')];
+
+    assert.equal(page.$('ub-timeline-box').style.display, '');
+    assert.equal(cols.length, 12);
+    assert.equal(cols[2].querySelector('.ub-tl-count').textContent, '3');
+    assert.equal(cols[2].querySelector('.ub-tl-bar').style.height, '100%');
+    assert.equal(cols[5].querySelector('.ub-tl-bar').style.height, '33%');
+    assert.equal(cols[0].querySelector('.ub-tl-count').textContent, '');
+    assert.ok(cols[0].querySelector('.ub-tl-label').textContent.includes('2026'), 'the first month shows the year');
+    assert.equal(page.$('ub-timeline-empty').style.display, 'none');
+});
+
+test('UPS overview: an empty timeline says so instead of showing empty bars', async () => {
+    const empty = (url) => {
+        const body = DEFAULT_ROUTES['/plugin/ups-battery/ups'](url);
+        return { ...body, cards: { ...body.cards, swap_timeline: body.cards.swap_timeline.map((m) => ({ ...m, count: 0 })) } };
+    };
+    const page = await boot({ defaultView: 'ups', routes: { '/plugin/ups-battery/ups': empty } });
+
+    assert.equal(page.$('ub-timeline').style.display, 'none');
+    assert.equal(page.$('ub-timeline-empty').style.display, '');
+});
+
+test('UPS overview: the attention column says why a UPS needs a look', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const [first, second] = page.rows();
+    const attention = first.children[4];
+    const badges = [...attention.querySelectorAll('.label')];
+
+    assert.equal(page.document.querySelectorAll('#ub-head th')[4].textContent, 'ups.col_attention');
+    assert.equal(badges.length, 3);
+    assert.ok(badges[0].classList.contains('label-danger'));
+    assert.equal(badges[0].textContent, 'on_battery');
+    assert.ok(attention.textContent.includes('issues.more'), 'the rest is summarised');
+    assert.equal(attention.title.split('\n').length, 5, 'the tooltip lists every issue');
+    assert.equal(second.children[4].textContent, '–');
+});
+
+test('UPS overview: charge, load and battery life get a bar', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const first = page.rows()[0];
+    const charge = first.children[6].querySelector('.ub-bar > span');
+    const life = first.children[12].querySelector('.ub-bar');
+
+    assert.ok(charge, 'charge bar');
+    assert.ok(first.children[7].querySelector('.ub-bar'), 'load bar');
+    assert.equal(first.children[5].querySelector('.ub-bar'), null, 'no bar for runtime');
+    assert.ok(life.classList.contains('ub-bar-critical'));
+    assert.equal(life.firstChild.style.width, '100%', 'capped at 100 %');
+    assert.equal(life.title, 'ups.life_used');
+    assert.equal(page.rows()[1].children[12].querySelector('.ub-bar'), null);
 });

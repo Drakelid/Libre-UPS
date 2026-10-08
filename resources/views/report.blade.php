@@ -50,6 +50,22 @@
     #ups-battery .ub-details dd { margin-left: 150px; }
     #ups-battery .ub-toggle, #ups-battery .ub-edit { padding: 0 4px; }
     #ups-battery.ub-kiosk .ub-card-value { font-size: 2.6em; }
+    #ups-battery .ub-card-button { cursor: pointer; }
+    #ups-battery .ub-card-button:hover, #ups-battery .ub-card-button:focus { background: rgba(127, 127, 127, .08); outline: none; }
+    #ups-battery .ub-card.ub-active { box-shadow: inset 0 0 0 2px #337ab7; }
+    #ups-battery .ub-bar { height: 4px; min-width: 50px; margin-top: 3px; border-radius: 2px; background: rgba(127, 127, 127, .25); overflow: hidden; }
+    #ups-battery .ub-bar > span { display: block; height: 100%; background: #5cb85c; }
+    #ups-battery .ub-bar-warning > span { background: #f0ad4e; }
+    #ups-battery .ub-bar-critical > span { background: #d9534f; }
+    #ups-battery .ub-timeline-box { border: 1px solid #ddd; border-radius: 4px; padding: 8px 12px; margin-bottom: 12px; max-width: 760px; }
+    #ups-battery .ub-timeline-title { font-weight: bold; margin-bottom: 4px; }
+    #ups-battery .ub-timeline { display: flex; gap: 4px; align-items: flex-end; }
+    #ups-battery .ub-tl-col { flex: 1 1 0; text-align: center; font-size: .85em; min-width: 0; }
+    #ups-battery .ub-tl-count { height: 1.3em; font-weight: bold; }
+    #ups-battery .ub-tl-bar-box { height: 60px; display: flex; align-items: flex-end; justify-content: center; }
+    #ups-battery .ub-tl-bar { width: 70%; min-height: 1px; background: #337ab7; border-radius: 2px 2px 0 0; }
+    #ups-battery .ub-tl-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .8; }
+    #ups-battery td .label { display: inline-block; margin-bottom: 2px; }
 </style>
 @endpush
 
@@ -149,6 +165,11 @@
     <div id="ub-error" class="alert alert-danger" style="display: none;" role="alert"></div>
     <p id="ub-hint" class="text-muted" style="display: none;">{{ $t('view.matrix_hint') }}</p>
     <div id="ub-cards" class="ub-cards" style="display: none;"></div>
+    <div id="ub-timeline-box" class="ub-timeline-box" style="display: none;">
+        <div class="ub-timeline-title">{{ $t('ups.timeline_title') }}</div>
+        <div id="ub-timeline" class="ub-timeline"></div>
+        <p id="ub-timeline-empty" class="text-muted small" style="display: none;">{{ $t('ups.timeline_empty') }}</p>
+    </div>
     <p id="ub-summary" class="text-muted" aria-live="polite"></p>
 
     <div class="table-responsive">

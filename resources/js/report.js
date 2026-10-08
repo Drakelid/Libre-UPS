@@ -18,6 +18,8 @@
     const SINGLE_SORTS = ['hostname', 'location', 'descr', 'value', 'lastupdate'];
     const UPS_SORTS = ['status', 'hostname', 'location', 'runtime', 'charge', 'load', 'temperature', 'swap'];
     const VIEWS = ['ups', 'single', 'matrix'];
+    const FOCUS = ['on_battery', 'overdue', 'due', 'alarm', 'unknown', 'down'];
+    const MAX_BADGES = 3;
     const KIOSK_REFRESH_SECONDS = 300;
     const el = (id) => document.getElementById(id);
 
@@ -51,6 +53,7 @@
         state.sensor = '';
         state.suspect = false;
         state.attention = false;
+        state.focus = '';
         state.sort = '';
         state.dir = null;
         state.limit = String(d.limit === undefined ? 25 : d.limit);
@@ -76,6 +79,7 @@
         state.sensor = s('sensor', '');
         state.suspect = s('suspect', '') === '1';
         state.attention = s('attention', '') === '1';
+        state.focus = FOCUS.indexOf(s('focus', '')) !== -1 ? s('focus', '') : '';
         state.sort = s('sort', '');
         state.dir = s('dir', '') || null;
         state.limit = s('limit', String(defaults.limit === undefined ? 25 : defaults.limit));
@@ -101,6 +105,7 @@
             if (state.suspect) { p.set('suspect', '1'); }
         } else if (ups) {
             if (state.attention) { p.set('attention', '1'); }
+            if (state.focus) { p.set('focus', state.focus); }
         } else {
             p.set('class', state.klass);
             p.set('aggregate', state.aggregate);
@@ -285,6 +290,7 @@
         el('ub-attention-group').style.display = ups ? '' : 'none';
         el('ub-attention').checked = state.attention;
         el('ub-cards').style.display = ups ? '' : 'none';
+        el('ub-timeline-box').style.display = ups ? '' : 'none';
         el('ub-classes-group').style.display = matrix ? '' : 'none';
         el('ub-hint').style.display = matrix ? '' : 'none';
         el('ub-suspect-group').style.display = matrix ? '' : 'none';
@@ -643,8 +649,22 @@
 
     // ---- UPS overview ----
 
-    /** A value cell like in the compare view: severity colour, stale icon, link to the sensor and hover graph. */
-    function sensorCell(data, title) {
+    /** Thin horizontal bar for a percentage (0-100), coloured by severity. */
+    function bar(percent, severity, title) {
+        const outer = document.createElement('div');
+        outer.className = 'ub-bar' + (severity === 'critical' || severity === 'warning' ? ' ub-bar-' + severity : '');
+        if (title) { outer.title = title; }
+        const inner = document.createElement('span');
+        inner.style.width = Math.max(0, Math.min(100, Math.round(percent))) + '%';
+        outer.appendChild(inner);
+        return outer;
+    }
+
+    /**
+     * A value cell like in the compare view: severity colour, stale icon, link to the sensor and hover graph.
+     * With `withBar` a percentage value (charge, load) also gets a bar.
+     */
+    function sensorCell(data, title, withBar) {
         const td = document.createElement('td');
         if (!data) {
             td.className = 'text-muted';
@@ -658,7 +678,37 @@
             td.appendChild(document.createTextNode(' '));
         }
         td.appendChild(link(data.value_formatted, data.sensor_url, data.sensor_descr));
+        if (withBar && typeof data.value === 'number') { td.appendChild(bar(data.value, data.severity, null)); }
         attachGraph(td, data.graph_url, title + ' - ' + data.sensor_descr);
+        return td;
+    }
+
+    function issueText(issue) {
+        const text = (T.issues && T.issues[issue.key]) || issue.key;
+        return issue.n === null || issue.n === undefined ? text : text.replace(':n', issue.n);
+    }
+
+    /** Why the UPS needs attention: the most severe issues as badges, all of them in the tooltip. */
+    function attentionCell(r) {
+        const td = document.createElement('td');
+        const issues = r.issues || [];
+        if (!issues.length) {
+            td.className = 'text-muted';
+            td.textContent = '–';
+            return td;
+        }
+        td.title = issues.map(issueText).join('\n');
+        issues.slice(0, MAX_BADGES).forEach((issue, index) => {
+            if (index > 0) { td.appendChild(document.createTextNode(' ')); }
+            td.appendChild(badge(issueText(issue), issue.severity === 'critical' ? 'danger' : 'warning', null));
+        });
+        if (issues.length > MAX_BADGES) {
+            td.appendChild(document.createTextNode(' '));
+            const more = document.createElement('small');
+            more.className = 'text-muted';
+            more.textContent = T.issues.more.replace(':n', issues.length - MAX_BADGES);
+            td.appendChild(more);
+        }
         return td;
     }
 
@@ -726,6 +776,9 @@
         const small = document.createElement('small');
         small.textContent = '(' + swapText(swap) + ')';
         td.appendChild(small);
+        if (typeof swap.life_used === 'number') {
+            td.appendChild(bar(swap.life_used, swap.severity, T.ups.life_used.replace(':n', swap.life_used)));
+        }
         return td;
     }
 
@@ -814,7 +867,11 @@
         return button;
     }
 
-    function card(value, label, tone, node) {
+    /**
+     * A summary card. With `focus` it is a button: a click shows only the UPSs it counts, a second click
+     * (or the "UPSs" card, focus '') shows all again.
+     */
+    function card(value, label, tone, node, focus) {
         const box = document.createElement('div');
         box.className = 'ub-card' + (tone ? ' ub-' + tone : '');
         const number = document.createElement('div');
@@ -825,6 +882,23 @@
         text.textContent = label;
         box.appendChild(number);
         box.appendChild(text);
+
+        if (focus !== undefined) {
+            const active = state.focus === focus && focus !== '';
+            box.classList.add('ub-card-button');
+            if (active) { box.classList.add('ub-active'); }
+            box.setAttribute('role', 'button');
+            box.setAttribute('tabindex', '0');
+            box.setAttribute('data-focus', focus);
+            box.setAttribute('aria-pressed', active ? 'true' : 'false');
+            box.title = active || focus === '' ? T.ups.card_clear : T.ups.card_filter;
+            const choose = () => {
+                state.focus = state.focus === focus ? '' : focus;
+                loadData().catch(handleFailure);
+            };
+            box.addEventListener('click', choose);
+            box.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
+        }
         return box;
     }
 
@@ -832,16 +906,57 @@
         const c = body.cards;
         const box = el('ub-cards');
         box.textContent = '';
-        box.appendChild(card(c.devices, T.ups.card_devices, ''));
-        box.appendChild(card(c.on_battery, T.ups.card_on_battery, c.on_battery > 0 ? 'danger' : ''));
-        box.appendChild(card(c.swap_overdue, T.ups.card_overdue, c.swap_overdue > 0 ? 'danger' : ''));
-        box.appendChild(card(c.swap_due, T.ups.card_due.replace(':days', body.warn_days), c.swap_due > 0 ? 'warn' : ''));
-        box.appendChild(card(c.battery_alarm, T.ups.card_alarm, c.battery_alarm > 0 ? 'warn' : ''));
-        box.appendChild(card(c.swap_unknown, T.ups.card_unknown, ''));
+        box.appendChild(card(c.devices, T.ups.card_devices, '', null, ''));
+        box.appendChild(card(c.on_battery, T.ups.card_on_battery, c.on_battery > 0 ? 'danger' : '', null, 'on_battery'));
+        box.appendChild(card(c.swap_overdue, T.ups.card_overdue, c.swap_overdue > 0 ? 'danger' : '', null, 'overdue'));
+        box.appendChild(card(c.swap_due, T.ups.card_due.replace(':days', body.warn_days), c.swap_due > 0 ? 'warn' : '', null, 'due'));
+        box.appendChild(card(c.battery_alarm, T.ups.card_alarm, c.battery_alarm > 0 ? 'warn' : '', null, 'alarm'));
+        box.appendChild(card(c.down || 0, T.ups.card_down, c.down > 0 ? 'warn' : '', null, 'down'));
+        box.appendChild(card(c.swap_unknown, T.ups.card_unknown, '', null, 'unknown'));
         if (c.lowest_runtime) {
             const lowest = card(null, T.ups.card_lowest + ': ' + c.lowest_runtime.display_name, '', link(c.lowest_runtime.value_formatted, c.lowest_runtime.device_url, c.lowest_runtime.display_name));
             box.appendChild(lowest);
         }
+        renderTimeline(c.swap_timeline || []);
+    }
+
+    /** Short month name in the browser's language, with the year for January and the first month. */
+    function monthLabel(key, first) {
+        const parts = key.split('-');
+        const date = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+        const name = date.toLocaleDateString(document.documentElement.lang || undefined, { month: 'short' });
+        return first || parts[1] === '01' ? name + ' ' + parts[0] : name;
+    }
+
+    /** Bars for the battery swaps due in each of the next 12 months, to plan battery orders. */
+    function renderTimeline(months) {
+        const box = el('ub-timeline');
+        box.textContent = '';
+        const max = months.reduce((m, item) => Math.max(m, item.count), 0);
+        el('ub-timeline-empty').style.display = max === 0 ? '' : 'none';
+        box.style.display = max === 0 ? 'none' : '';
+
+        months.forEach((item, index) => {
+            const col = document.createElement('div');
+            col.className = 'ub-tl-col';
+            col.title = monthLabel(item.month, true) + ': ' + item.count;
+            const count = document.createElement('div');
+            count.className = 'ub-tl-count';
+            count.textContent = item.count > 0 ? String(item.count) : '';
+            const barBox = document.createElement('div');
+            barBox.className = 'ub-tl-bar-box';
+            const fill = document.createElement('div');
+            fill.className = 'ub-tl-bar';
+            fill.style.height = (max > 0 ? Math.round(item.count / max * 100) : 0) + '%';
+            barBox.appendChild(fill);
+            const label = document.createElement('div');
+            label.className = 'ub-tl-label';
+            label.textContent = monthLabel(item.month, index === 0);
+            col.appendChild(count);
+            col.appendChild(barBox);
+            col.appendChild(label);
+            box.appendChild(col);
+        });
     }
 
     function renderUps(body) {
@@ -850,6 +965,7 @@
             { sort: 'hostname', label: T.columns.hostname },
             { sort: 'location', label: T.columns.location },
             { sort: 'status', label: T.ups.col_status },
+            { sort: null, label: T.ups.col_attention },
             { sort: 'runtime', label: T.ups.col_runtime },
             { sort: 'charge', label: T.ups.col_charge },
             { sort: 'load', label: T.ups.col_load },
@@ -893,9 +1009,10 @@
             tr.appendChild(host);
             tr.appendChild(cell(r.location || ''));
             tr.appendChild(statusCell(r));
+            tr.appendChild(attentionCell(r));
             tr.appendChild(sensorCell(r.runtime, r.display_name));
-            tr.appendChild(sensorCell(r.charge, r.display_name));
-            tr.appendChild(sensorCell(r.load, r.display_name));
+            tr.appendChild(sensorCell(r.charge, r.display_name, true));
+            tr.appendChild(sensorCell(r.load, r.display_name, true));
             tr.appendChild(sensorCell(r.temperature, r.display_name));
             tr.appendChild(batteryStatusCell(r));
             tr.appendChild(sensorCell(r.self_test, r.display_name));

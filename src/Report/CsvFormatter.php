@@ -118,7 +118,7 @@ final class CsvFormatter
         return [
             'hostname', 'display_name', 'location', 'os', 'status', 'on_battery',
             'runtime', 'charge', 'load', 'temperature', 'battery_status', 'bad_battery_packs', 'self_test', 'suspect_battery',
-            'battery_installed', 'swap_due', 'swap_days_left', 'swap_source',
+            'battery_installed', 'swap_due', 'swap_days_left', 'swap_source', 'battery_life_used', 'issues',
         ];
     }
 
@@ -148,6 +148,8 @@ final class CsvFormatter
             $row->swap->due ?? '',
             $row->swap->daysLeft === null ? '' : (string) $row->swap->daysLeft,
             $row->swap->source,
+            $row->swap->lifeUsed === null ? '' : (string) $row->swap->lifeUsed,
+            implode(',', array_map(fn (array $issue): string => $issue['key'], $row->issues)),
         ];
     }
 

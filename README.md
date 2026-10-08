@@ -33,7 +33,7 @@ ups-stasjon-03   Stasjon C   Battery runtime  18 minutes        4 min ago
 
 **Reports**
 
-- **UPS overview** (the page opens here): one row per UPS with power status (on battery / on mains), runtime, charge, load, temperature, battery status, bad battery packs, suspect battery, last self-test result, battery install date and the **next battery swap** with the days left. A row opens to show every other sensor of the UPS (input/output voltage, frequency, ...). Summary cards above the table count UPSs on battery, overdue swaps, swaps due soon and battery problems, and show the lowest runtime. "Needs attention only" hides the UPSs without a problem. See [Battery replacement](#battery-replacement).
+- **UPS overview** (the page opens here): one row per UPS with power status (on battery / on mains), runtime, charge, load, temperature, battery status, bad battery packs, suspect battery, last self-test result, battery install date and the **next battery swap** with the days left. A row opens to show every other sensor of the UPS (input/output voltage, frequency, ...). An *Attention* column says in a few words why a UPS is yellow or red. Summary cards above the table count UPSs on battery, overdue swaps, swaps due soon, battery problems and unreachable UPSs, and show the lowest runtime; click a card to show only those UPSs. A timeline shows how many battery swaps fall in each of the next 12 months, and bars show charge, load and how much of each battery's life has passed. "Needs attention only" hides the UPSs without a problem. See [Battery replacement](#battery-replacement).
 - **Single metric view:** ranked table of hostname, location, sensor, value and last update. Filter on device type, metric, OS, device group, sensor name and free text (hostname, sysName, display name, location).
 - **Compare metrics view:** one row per device and one column per metric (up to six). Each cell shows the device's *worst* sensor for that metric, for example the shortest runtime or the highest load.
 - Sort on any column, show the top 10, 25, 50, 100 or all rows, and optionally reduce each device to its lowest or highest sensor.
@@ -228,7 +228,7 @@ The page is backed by JSON endpoints that can also be used directly. All routes 
 | --- | --- |
 | `GET /plugin/ups-battery/report` | The report page |
 | `GET /plugin/ups-battery/options?type=` | Filter options (device types, OS, groups, metrics) as JSON |
-| `GET /plugin/ups-battery/ups?type=&os=&group=&q=&attention=1&sort=status\|hostname\|location\|runtime\|charge\|load\|temperature\|swap&dir=&limit=&format=json\|csv` | UPS overview rows and summary cards as JSON, or the rows as CSV |
+| `GET /plugin/ups-battery/ups?type=&os=&group=&q=&attention=1&focus=on_battery\|overdue\|due\|alarm\|unknown\|down&sort=status\|hostname\|location\|runtime\|charge\|load\|temperature\|swap&dir=&limit=&format=json\|csv` | UPS overview rows and summary cards as JSON, or the rows as CSV |
 | `POST /plugin/ups-battery/battery` with `{"device_id": 12, "installed": "2025-03-01"}` | Sets the battery install date (empty `installed` removes it). Needs the permission to update devices |
 | `GET /plugin/ups-battery/data?type=&class=&os=&group=&q=&sensor=&sort=&dir=&limit=&aggregate=&format=json\|csv` | Single-metric rows as JSON or CSV |
 | `GET /plugin/ups-battery/matrix?type=&classes=runtime,load,charge&os=&group=&q=&sensor=&suspect=1&sort=&dir=&limit=&format=json\|csv` | Compare-metrics rows as JSON or CSV |

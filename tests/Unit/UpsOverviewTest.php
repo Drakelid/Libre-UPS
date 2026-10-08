@@ -138,7 +138,7 @@ it('knows no swap date without any date', function (): void {
         ->and($swap->due)->toBeNull()
         ->and($swap->daysLeft)->toBeNull()
         ->and($swap->severity)->toBe(Severity::Unknown)
-        ->and($swap->toArray())->toBe(['installed' => null, 'due' => null, 'days_left' => null, 'source' => 'none', 'severity' => 'unknown']);
+        ->and($swap->toArray())->toBe(['installed' => null, 'due' => null, 'days_left' => null, 'source' => 'none', 'severity' => 'unknown', 'life_used' => null]);
 });
 
 it('ignores an invalid install date', function (): void {
@@ -303,7 +303,7 @@ it('turns a UPS row into the JSON the page reads', function (): void {
     $row = upsBuilder()->row([upsSensor(1, 'runtime', 30.0), upsSensor(1, 'voltage', 230.0, ['sensorDescr' => 'Input'])], '2024-01-01');
     $data = $row->toArray(fn (string $class): string => strtoupper($class));
 
-    expect(array_keys($data))->toBe(['device_id', 'hostname', 'display_name', 'device_url', 'location', 'os', 'device_up', 'severity', 'on_battery', 'suspect', 'runtime', 'charge', 'load', 'temperature', 'battery', 'bad_packs', 'output', 'self_test', 'swap', 'sensors'])
+    expect(array_keys($data))->toBe(['device_id', 'hostname', 'display_name', 'device_url', 'location', 'os', 'device_up', 'severity', 'on_battery', 'suspect', 'runtime', 'charge', 'load', 'temperature', 'battery', 'bad_packs', 'output', 'self_test', 'swap', 'issues', 'sensors'])
         ->and($data['runtime']['value'])->toBe(30.0)
         ->and($data['charge'])->toBeNull()
         ->and($data['swap']['due'])->toBe('2028-01-01')
@@ -354,3 +354,100 @@ function upsMailTexts(): array
 {
     return (require __DIR__.'/../../lang/en/ups-battery.php')['report_mail'];
 }
+
+// ---- insight: battery life, issues, card filters, timeline ----
+
+it('works out how much of the battery life has been used', function (): void {
+    expect(BatterySwap::evaluate('2024-10-08', null, null, null, 48, 90, upsNow())->lifeUsed)->toBe(50)
+        ->and(BatterySwap::evaluate('2026-10-08', null, null, null, 48, 90, upsNow())->lifeUsed)->toBe(0)
+        ->and(BatterySwap::evaluate('2020-10-08', null, null, null, 48, 90, upsNow())->lifeUsed)->toBe(150)
+        ->and(BatterySwap::evaluate(null, null, -365 * 1440.0, UPS_NOW, 48, 90, upsNow())->lifeUsed)->toBe(25)
+        ->and(BatterySwap::evaluate(null, 1440.0, null, UPS_NOW, 48, 90, upsNow())->lifeUsed)->toBeNull();
+});
+
+it('lists why a UPS needs attention, most severe first', function (): void {
+    $row = upsBuilder()->row([
+        upsSensor(1, 'runtime', 4.0, ['severity' => Severity::Warning]),
+        upsSensor(1, 'load', 10.0),
+        upsSensor(1, 'charge', 100.0),
+        upsSensor(1, 'temperature', 45.0, ['severity' => Severity::Critical]),
+        upsSensor(1, 'count', 2.0, ['sensorIndex' => 'upsAdvBatteryNumOfBadBattPacks.0']),
+        upsSensor(1, 'state', 3.0, ['sensorType' => 'upsBasicOutputStatus', 'valueFormatted' => 'onBattery', 'severity' => Severity::Warning]),
+    ], '2020-01-01');
+
+    expect(array_column($row->issues, 'key'))->toBe(['on_battery', 'temperature', 'bad_packs', 'swap_overdue', 'runtime', 'suspect'])
+        ->and($row->issues[2]['n'])->toBe(2)
+        ->and($row->issues[3]['n'])->toBeGreaterThan(1000)
+        ->and($row->issues[4]['severity'])->toBe('warning');
+});
+
+it('has no issues for a healthy UPS and flags one that is unreachable', function (): void {
+    $healthy = upsBuilder()->row([upsSensor(1, 'runtime', 30.0)], '2025-01-01');
+    $down = upsBuilder()->row([upsSensor(1, 'runtime', 30.0, ['deviceUp' => false])], '2025-01-01');
+
+    expect($healthy->issues)->toBe([])
+        ->and($down->issues)->toBe([['key' => 'down', 'severity' => 'warning', 'n' => null]])
+        ->and($down->severity)->toBe(Severity::Warning)
+        ->and($down->needsAttention())->toBeTrue();
+});
+
+it('filters on the summary card that was clicked', function (string $focus, array $expected): void {
+    $sensors = [
+        1 => [upsSensor(1, 'runtime', 30.0)],
+        2 => [upsSensor(2, 'runtime', 30.0), upsSensor(2, 'state', 5.0, ['sensorType' => 'upsOutputSourceState', 'valueFormatted' => 'Battery'])],
+        3 => [upsSensor(3, 'runtime', 30.0, ['deviceUp' => false])],
+        4 => [upsSensor(4, 'runtime', 30.0), upsSensor(4, 'state', 2.0, ['sensorType' => 'upsBatteryStatusState', 'valueFormatted' => 'Low', 'severity' => Severity::Critical])],
+        5 => [upsSensor(5, 'runtime', 30.0)],
+    ];
+    $installed = [1 => '2020-01-01', 3 => '2025-01-01', 4 => '2025-01-01', 5 => '2022-12-01'];
+
+    $result = upsBuilder()->build($sensors, $installed, upsFilters(['focus' => $focus, 'sort' => 'hostname']));
+
+    expect(array_map(fn ($r) => $r->deviceId, $result['rows']))->toBe($expected)
+        ->and($result['cards']['devices'])->toBe(5);
+})->with([
+    ['on_battery', [2]],
+    ['overdue', [1]],
+    ['due', [5]],
+    ['unknown', [2]],
+    ['alarm', [4]],
+    ['down', [3]],
+]);
+
+it('rejects an unknown card filter', function (): void {
+    expect(fn () => upsFilters(['focus' => 'everything']))->toThrow(InvalidArgumentException::class)
+        ->and(upsFilters(['focus' => ''])->focus)->toBeNull()
+        ->and(upsFilters(['focus' => 'due'])->toArray()['focus'])->toBe('due');
+});
+
+it('counts unreachable UPSs and the battery swaps per month for the next 12 months', function (): void {
+    $sensors = [
+        1 => [upsSensor(1, 'runtime', 30.0, ['deviceUp' => false])],
+        2 => [upsSensor(2, 'runtime', 30.0)],
+        3 => [upsSensor(3, 'runtime', 30.0)],
+        4 => [upsSensor(4, 'runtime', 30.0)],
+        5 => [upsSensor(5, 'runtime', 30.0)],
+    ];
+    // due 2026-10-20 (this month), 2026-12-01, 2026-12-15, overdue, and in 2028 (outside the window)
+    $installed = [1 => '2022-10-20', 2 => '2022-12-01', 3 => '2022-12-15', 4 => '2020-01-01', 5 => '2024-01-01'];
+
+    $cards = upsBuilder()->build($sensors, $installed, upsFilters())['cards'];
+    $timeline = array_column($cards['swap_timeline'], 'count', 'month');
+
+    expect($cards['down'])->toBe(1)
+        ->and(count($cards['swap_timeline']))->toBe(12)
+        ->and($cards['swap_timeline'][0]['month'])->toBe('2026-10')
+        ->and($cards['swap_timeline'][11]['month'])->toBe('2027-09')
+        ->and($timeline['2026-10'])->toBe(1)
+        ->and($timeline['2026-11'])->toBe(0)
+        ->and($timeline['2026-12'])->toBe(2)
+        ->and(array_sum($timeline))->toBe(3);
+});
+
+it('exports the battery life used and the issues in the CSV', function (): void {
+    $row = upsBuilder()->row([upsSensor(1, 'runtime', 30.0)], '2020-01-01');
+    $line = array_combine((new CsvFormatter)->upsHeader(), (new CsvFormatter)->upsLine($row));
+
+    expect($line['battery_life_used'])->toBe('169')
+        ->and($line['issues'])->toBe('swap_overdue');
+});

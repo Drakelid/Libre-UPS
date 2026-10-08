@@ -29,6 +29,7 @@ final readonly class BatterySwap
         public ?int $daysLeft,
         public string $source,
         public Severity $severity,
+        public ?int $lifeUsed = null,
     ) {}
 
     /**
@@ -82,7 +83,7 @@ final readonly class BatterySwap
         return $date !== false && $date->format('Y-m-d') === $value ? $date : null;
     }
 
-    /** @return array{installed: ?string, due: ?string, days_left: ?int, source: string, severity: string} */
+    /** @return array{installed: ?string, due: ?string, days_left: ?int, source: string, severity: string, life_used: ?int} */
     public function toArray(): array
     {
         return [
@@ -91,6 +92,7 @@ final readonly class BatterySwap
             'days_left' => $this->daysLeft,
             'source' => $this->source,
             'severity' => $this->severity->value,
+            'life_used' => $this->lifeUsed,
         ];
     }
 
@@ -106,7 +108,16 @@ final readonly class BatterySwap
             default => Severity::Ok,
         };
 
-        return new self($installed?->format('Y-m-d'), $due->format('Y-m-d'), $days, $source, $severity);
+        // Share of the battery's life that has passed, known when the install date is known (100 = due today).
+        $lifeUsed = null;
+        if ($installed !== null) {
+            $installedDay = new DateTimeImmutable($installed->format('Y-m-d'), $today->getTimezone());
+            $total = (int) $installedDay->diff($dueDay)->format('%r%a');
+            $elapsed = (int) $installedDay->diff($todayDay)->format('%r%a');
+            $lifeUsed = $total > 0 ? max(0, (int) round($elapsed / $total * 100)) : 100;
+        }
+
+        return new self($installed?->format('Y-m-d'), $due->format('Y-m-d'), $days, $source, $severity, $lifeUsed);
     }
 
     private static function parseInstant(?string $iso, DateTimeImmutable $now): ?DateTimeImmutable

@@ -40,6 +40,10 @@ final class UpsBuilder
             $rows = array_values(array_filter($rows, fn (UpsRow $row): bool => $row->needsAttention()));
         }
 
+        if ($filters->focus !== null) {
+            $rows = array_values(array_filter($rows, fn (UpsRow $row): bool => $this->inFocus($row, $filters->focus)));
+        }
+
         $rows = $this->sort($rows, $filters);
         $total = count($rows);
 
@@ -112,6 +116,20 @@ final class UpsBuilder
 
         $info = $sensors[0];
 
+        // An unreachable UPS is no longer monitored; its values are as old as the last poll.
+        if (! $info->deviceUp) {
+            $severity = self::worse($severity, Severity::Warning);
+        }
+
+        $issues = self::issues($info->deviceUp, $onBattery, $suspect, $swap, [
+            'runtime' => $runtime,
+            'charge' => $charge,
+            'load' => $load,
+            'temperature' => $temperature,
+            'battery' => $battery,
+            'self_test' => $selfTest,
+        ], $badPacks);
+
         return new UpsRow(
             $info->deviceId,
             $info->hostname,
@@ -133,35 +151,104 @@ final class UpsBuilder
             $suspect,
             $swap,
             self::sortedSensors($sensors),
+            $issues,
         );
+    }
+
+    /**
+     * Why a UPS needs attention, most severe first. "n" is a number for the text: days overdue or left,
+     * or the number of bad battery packs.
+     *
+     * @param  array<string, ReportRow|null>  $cells  Keyed by issue key.
+     * @return array<int, array{key: string, severity: string, n: int|null}>
+     */
+    public static function issues(bool $deviceUp, ?bool $onBattery, ?bool $suspect, BatterySwap $swap, array $cells, ?ReportRow $badPacks): array
+    {
+        $issues = [];
+        $add = function (string $key, Severity $severity, ?int $n = null) use (&$issues): void {
+            $issues[] = ['key' => $key, 'severity' => $severity->value, 'n' => $n];
+        };
+
+        if ($onBattery === true) {
+            $add('on_battery', Severity::Critical);
+        }
+
+        if (! $deviceUp) {
+            $add('down', Severity::Warning);
+        }
+
+        foreach ($cells as $key => $cell) {
+            if ($cell !== null && ($cell->severity === Severity::Warning || $cell->severity === Severity::Critical)) {
+                $add($key, $cell->severity);
+            }
+        }
+
+        if (($badPacks?->value ?? 0) > 0) {
+            $add('bad_packs', Severity::Critical, (int) $badPacks->value);
+        }
+
+        if ($suspect === true) {
+            $add('suspect', Severity::Warning);
+        }
+
+        if ($swap->daysLeft !== null && $swap->severity === Severity::Critical) {
+            $add('swap_overdue', Severity::Critical, -$swap->daysLeft);
+        } elseif ($swap->daysLeft !== null && $swap->severity === Severity::Warning) {
+            $add('swap_due', Severity::Warning, $swap->daysLeft);
+        }
+
+        // usort is stable, so issues of the same severity keep the order above
+        usort($issues, fn (array $a, array $b): int => Severity::from($b['severity'])->rank() <=> Severity::from($a['severity'])->rank());
+
+        return $issues;
+    }
+
+    /** Whether a summary card counts the UPS; the same test filters the table when the card is clicked. */
+    public function inFocus(UpsRow $row, string $focus): bool
+    {
+        $days = $row->swap->daysLeft;
+
+        return match ($focus) {
+            'on_battery' => $row->onBattery === true,
+            'overdue' => $days !== null && $days <= 0,
+            'due' => $days !== null && $days > 0 && $days <= $this->warnDays,
+            'unknown' => $days === null,
+            'alarm' => $this->hasBatteryAlarm($row),
+            'down' => ! $row->deviceUp,
+            default => true,
+        };
     }
 
     /**
      * Summary over all UPSs that match the filters (before the "needs attention" filter and the row limit).
      *
      * @param  UpsRow[]  $rows
-     * @return array{devices: int, on_battery: int, swap_overdue: int, swap_due: int, swap_unknown: int, battery_alarm: int, lowest_runtime: array{display_name: string, device_url: string, value_formatted: string}|null}
+     *                          The swap timeline counts the battery swaps due in each of the next 12 months (this month first).
+     * @return array{devices: int, on_battery: int, swap_overdue: int, swap_due: int, swap_unknown: int, battery_alarm: int, down: int, lowest_runtime: array{display_name: string, device_url: string, value_formatted: string}|null, swap_timeline: array<int, array{month: string, count: int}>}
      */
     public function cards(array $rows): array
     {
-        $cards = ['devices' => count($rows), 'on_battery' => 0, 'swap_overdue' => 0, 'swap_due' => 0, 'swap_unknown' => 0, 'battery_alarm' => 0, 'lowest_runtime' => null];
+        $counted = ['on_battery' => 'on_battery', 'swap_overdue' => 'overdue', 'swap_due' => 'due', 'swap_unknown' => 'unknown', 'battery_alarm' => 'alarm', 'down' => 'down'];
+        $cards = ['devices' => count($rows)] + array_fill_keys(array_keys($counted), 0) + ['lowest_runtime' => null];
         $lowest = null;
 
+        $months = [];
+        $month = $this->now->modify('first day of this month');
+        for ($i = 0; $i < 12; $i++) {
+            $months[$month->format('Y-m')] = 0;
+            $month = $month->modify('+1 month');
+        }
+
         foreach ($rows as $row) {
-            if ($row->onBattery === true) {
-                $cards['on_battery']++;
+            foreach ($counted as $card => $focus) {
+                if ($this->inFocus($row, $focus)) {
+                    $cards[$card]++;
+                }
             }
 
-            if ($row->swap->daysLeft === null) {
-                $cards['swap_unknown']++;
-            } elseif ($row->swap->daysLeft <= 0) {
-                $cards['swap_overdue']++;
-            } elseif ($row->swap->daysLeft <= $this->warnDays) {
-                $cards['swap_due']++;
-            }
-
-            if ($this->hasBatteryAlarm($row)) {
-                $cards['battery_alarm']++;
+            $dueMonth = $row->swap->due === null ? null : substr($row->swap->due, 0, 7);
+            if ($dueMonth !== null && ($row->swap->daysLeft ?? 0) > 0 && isset($months[$dueMonth])) {
+                $months[$dueMonth]++;
             }
 
             if ($row->runtime?->value !== null && ($lowest === null || $row->runtime->value < $lowest->runtime?->value)) {
@@ -175,6 +262,11 @@ final class UpsBuilder
                 'device_url' => $lowest->deviceUrl,
                 'value_formatted' => $lowest->runtime->valueFormatted,
             ];
+        }
+
+        $cards['swap_timeline'] = [];
+        foreach ($months as $key => $count) {
+            $cards['swap_timeline'][] = ['month' => $key, 'count' => $count];
         }
 
         return $cards;
