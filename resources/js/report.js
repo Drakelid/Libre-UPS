@@ -385,6 +385,7 @@
         tr.textContent = '';
         columns.forEach((c) => {
             const th = document.createElement('th');
+            if (c.cls) { th.className = c.cls; }
             th.appendChild(document.createTextNode(c.label));
             if (c.sort) {
                 th.setAttribute('role', 'button');
@@ -703,7 +704,7 @@
         td.title = issues.map(issueText).join('\n');
         issues.slice(0, MAX_BADGES).forEach((issue, index) => {
             if (index > 0) { td.appendChild(document.createTextNode(' ')); }
-            td.appendChild(badge(issueText(issue), issue.severity === 'critical' ? 'danger' : 'warning', null));
+            td.appendChild(badge(issueText(issue), issue.severity === 'critical' ? 'danger' : 'warning', null, true));
         });
         if (issues.length > MAX_BADGES) {
             td.appendChild(document.createTextNode(' '));
@@ -715,9 +716,10 @@
         return td;
     }
 
-    function badge(text, kind, title) {
+    /** A rounded label; `soft` ones are tinted instead of solid, for secondary information. */
+    function badge(text, kind, title, soft) {
         const span = document.createElement('span');
-        span.className = 'label label-' + kind;
+        span.className = 'label label-' + kind + ' ub-pill' + (soft ? ' ub-pill-soft' : '');
         span.textContent = text;
         if (title) { span.title = title; }
         return span;
@@ -726,9 +728,14 @@
     function statusCell(r) {
         const td = document.createElement('td');
         if (r.on_battery === true) {
-            td.appendChild(badge(T.ups.on_battery, 'danger', r.output ? r.output.value_formatted : ''));
+            const pill = badge(T.ups.on_battery, 'danger', r.output ? r.output.value_formatted : '');
+            const dot = document.createElement('span');
+            dot.className = 'ub-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            pill.insertBefore(dot, pill.firstChild);
+            td.appendChild(pill);
         } else if (r.on_battery === false) {
-            td.appendChild(badge(T.ups.on_mains, 'success', r.output ? r.output.value_formatted : ''));
+            td.appendChild(badge(T.ups.on_mains, 'success', r.output ? r.output.value_formatted : '', true));
         } else if (r.output) {
             td.appendChild(document.createTextNode(r.output.value_formatted));
         } else {
@@ -776,9 +783,8 @@
         td.className = severityClass(swap.severity);
         if (swap.severity === 'critical' || swap.severity === 'warning') { td.style.fontWeight = 'bold'; }
         td.appendChild(document.createTextNode(swap.due + ' '));
-        const small = document.createElement('small');
-        small.textContent = '(' + swapText(swap) + ')';
-        td.appendChild(small);
+        const kind = { critical: 'danger', warning: 'warning', ok: 'success' }[swap.severity] || 'default';
+        td.appendChild(badge(swapText(swap), kind, null, true));
         if (typeof swap.life_used === 'number') {
             td.appendChild(bar(swap.life_used, swap.severity, T.ups.life_used.replace(':n', swap.life_used)));
         }
@@ -1002,7 +1008,7 @@
             const lowest = card(null, T.ups.card_lowest + ': ' + c.lowest_runtime.display_name, '', link(c.lowest_runtime.value_formatted, c.lowest_runtime.device_url, c.lowest_runtime.display_name), undefined, 'clock-o');
             box.appendChild(lowest);
         }
-        renderTimeline(c.swap_timeline || []);
+        renderTimeline(c.swap_timeline || [], body.warn_days);
     }
 
     /** Label of the summary card for a card filter. */
@@ -1049,8 +1055,13 @@
         return first || parts[1] === '01' ? name + ' ' + parts[0] : name;
     }
 
-    /** Bars for the battery swaps due in each of the next 12 months, to plan battery orders. */
-    function renderTimeline(months) {
+    /**
+     * Bars for the battery swaps due in each of the next 12 months, to plan battery orders.
+     * Months that start inside the warning window are drawn in orange.
+     */
+    function renderTimeline(months, warnDays) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const box = el('ub-timeline');
         box.textContent = '';
         const max = months.reduce((m, item) => Math.max(m, item.count), 0);
@@ -1059,7 +1070,9 @@
 
         months.forEach((item, index) => {
             const col = document.createElement('div');
-            col.className = 'ub-tl-col';
+            const parts = item.month.split('-');
+            const daysUntil = (new Date(Number(parts[0]), Number(parts[1]) - 1, 1) - today) / 86400000;
+            col.className = 'ub-tl-col' + (item.count === 0 ? ' ub-tl-empty' : (daysUntil <= (warnDays || 0) ? ' ub-tl-soon' : ''));
             col.title = monthLabel(item.month, true) + ': ' + item.count;
             const count = document.createElement('div');
             count.className = 'ub-tl-count';
@@ -1086,10 +1099,10 @@
             { sort: 'hostname', label: T.columns.hostname },
             { sort: 'status', label: T.ups.col_status },
             { sort: null, label: T.ups.col_attention },
-            { sort: 'runtime', label: T.ups.col_runtime },
-            { sort: 'charge', label: T.ups.col_charge },
-            { sort: 'load', label: T.ups.col_load },
-            { sort: 'temperature', label: T.ups.col_temperature },
+            { sort: 'runtime', label: T.ups.col_runtime, cls: 'ub-num' },
+            { sort: 'charge', label: T.ups.col_charge, cls: 'ub-num' },
+            { sort: 'load', label: T.ups.col_load, cls: 'ub-num' },
+            { sort: 'temperature', label: T.ups.col_temperature, cls: 'ub-num' },
             { sort: null, label: T.ups.col_battery },
             { sort: null, label: T.ups.col_self_test },
             { sort: 'swap', label: T.ups.col_swap }
@@ -1136,10 +1149,11 @@
             tr.appendChild(host);
             tr.appendChild(statusCell(r));
             tr.appendChild(attentionCell(r));
-            tr.appendChild(sensorCell(r.runtime, r.display_name));
-            tr.appendChild(sensorCell(r.charge, r.display_name, true));
-            tr.appendChild(sensorCell(r.load, r.display_name, true));
-            tr.appendChild(sensorCell(r.temperature, r.display_name));
+            [sensorCell(r.runtime, r.display_name), sensorCell(r.charge, r.display_name, true),
+                sensorCell(r.load, r.display_name, true), sensorCell(r.temperature, r.display_name)].forEach((td) => {
+                td.classList.add('ub-num');
+                tr.appendChild(td);
+            });
             tr.appendChild(batteryStatusCell(r));
             tr.appendChild(sensorCell(r.self_test, r.display_name));
             tr.appendChild(swapAndInstalledCell(r, body.can_edit === true));

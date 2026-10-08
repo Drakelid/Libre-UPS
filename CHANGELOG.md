@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.3] - 2026-10-08
+
+### Changed
+
+- Visual polish of the page, for LibreNMS' light and dark themes alike: colours are defined once as theme-neutral tints instead of fixed greys and blues.
+  - Summary cards have a coloured accent and tinted background when they count something, larger numbers, small uppercase labels and lift on hover.
+  - Status and attention labels are rounded pills; "On battery" has a pulsing dot (still for users who prefer reduced motion), attention badges and the swap countdown are tinted instead of solid.
+  - The table has small uppercase headers, right-aligned numbers with even digit widths and slightly taller bars; unreachable UPSs are dimmed.
+  - Timeline months inside the warning window are orange, empty months faint, with a baseline under the bars.
+  - The details and the "sensors with a problem" box use the same card style.
+
 ## [1.3.2] - 2026-10-08
 
 ### Changed

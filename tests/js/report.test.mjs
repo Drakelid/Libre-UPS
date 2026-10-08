@@ -58,6 +58,14 @@ const row = (overrides = {}) => ({
     unit: 'Min', severity: 'critical', limits: {}, last_updated: new Date(Date.now() - 3 * 60000).toISOString(), ...overrides,
 });
 
+/** The next 12 months from today as YYYY-MM, like the server's swap timeline. */
+const NEXT_MONTHS = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + i);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+});
+
 const DEFAULT_ROUTES = {
     '/plugin/ups-battery/options': { types: [{ value: 'power', count: 3 }], os: [{ value: 'apc', count: 3 }], groups: [{ id: 1, name: 'Group 1' }], classes: CLASSES },
     // Like the real endpoint, it echoes the sort that was asked for.
@@ -87,8 +95,7 @@ const DEFAULT_ROUTES = {
         cards: {
             devices: 2, on_battery: 1, swap_overdue: 1, swap_due: 0, swap_unknown: 1, battery_alarm: 1, down: 0,
             lowest_runtime: { display_name: 'UPS A', device_url: '/device/1', value_formatted: '4 min' },
-            swap_timeline: ['2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08', '2027-09']
-                .map((month, i) => ({ month, count: i === 2 ? 3 : (i === 5 ? 1 : 0) })),
+            swap_timeline: NEXT_MONTHS.map((month, i) => ({ month, count: i === 2 ? 3 : (i === 5 ? 1 : 0) })),
         },
         rows: [
             upsRow({
@@ -669,7 +676,7 @@ test('UPS overview: the timeline shows the battery swaps per month', async () =>
     assert.equal(cols[2].querySelector('.ub-tl-bar').style.height, '100%');
     assert.equal(cols[5].querySelector('.ub-tl-bar').style.height, '33%');
     assert.equal(cols[0].querySelector('.ub-tl-count').textContent, '');
-    assert.ok(cols[0].querySelector('.ub-tl-label').textContent.includes('2026'), 'the first month shows the year');
+    assert.ok(cols[0].querySelector('.ub-tl-label').textContent.includes(NEXT_MONTHS[0].slice(0, 4)), 'the first month shows the year');
     assert.equal(page.$('ub-timeline-empty').style.display, 'none');
 });
 
@@ -758,4 +765,38 @@ test('UPS overview: the summary cards have icons and keep their numbers readable
     assert.ok(cards.every((c) => c.querySelector('.ub-card-icon')), 'every card has an icon');
     assert.equal(cards[1].querySelector('.ub-card-value').textContent, '1');
     assert.ok(cards[1].querySelector('.fa-bolt'));
+});
+
+// ---- visual polish ----
+
+test('UPS overview: "on battery" is a pill with a dot, "on mains" a soft pill', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const [first, second] = page.rows();
+
+    const onBattery = first.children[2].querySelector('.label-danger');
+    assert.ok(onBattery.classList.contains('ub-pill'));
+    assert.ok(onBattery.querySelector('.ub-dot'), 'pulsing dot');
+    assert.ok(second.children[2].querySelector('.label-success').classList.contains('ub-pill-soft'));
+    assert.ok([...first.children[3].querySelectorAll('.label')].every((b) => b.classList.contains('ub-pill-soft')), 'attention badges are soft');
+});
+
+test('UPS overview: numbers are right-aligned and the swap countdown is a coloured pill', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const heads = [...page.document.querySelectorAll('#ub-head th')];
+    const first = page.rows()[0];
+
+    assert.deepEqual(heads.filter((th) => th.classList.contains('ub-num')).map((th) => th.getAttribute('data-sort')), ['runtime', 'charge', 'load', 'temperature']);
+    assert.deepEqual([4, 5, 6, 7].map((i) => first.children[i].classList.contains('ub-num')), [true, true, true, true]);
+    const countdown = first.children[10].querySelector('.ub-pill');
+    assert.ok(countdown.classList.contains('label-danger'));
+    assert.equal(countdown.textContent, 'ups.overdue');
+});
+
+test('UPS overview: timeline months inside the warning window are marked, empty months are faint', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const cols = [...page.document.querySelectorAll('#ub-timeline .ub-tl-col')];
+
+    assert.ok(cols[2].classList.contains('ub-tl-soon'), 'about two months away, inside 90 days');
+    assert.ok(!cols[5].classList.contains('ub-tl-soon'), 'about five months away');
+    assert.ok(cols[0].classList.contains('ub-tl-empty'));
 });
