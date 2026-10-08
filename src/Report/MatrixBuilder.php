@@ -11,10 +11,13 @@ final class MatrixBuilder
      * For every class the worst sensor per device is used: lowest value for classes where low is bad
      * (runtime, charge), highest value for the others (load, temperature, ...), see SortPolicy.
      *
+     * When a suspect rule is given and the runtime and load metrics are selected, every device also gets a
+     * suspect battery verdict (null when runtime or load is missing), and the "suspect only" filter works.
+     *
      * @param  array<string, ReportRow[]>  $rowsByClass
      * @return array{rows: MatrixRow[], total: int}
      */
-    public function build(array $rowsByClass, MatrixFilters $filters): array
+    public function build(array $rowsByClass, MatrixFilters $filters, ?SuspectRule $rule = null): array
     {
         $devices = [];
         foreach ($filters->classes as $class) {
@@ -29,9 +32,23 @@ final class MatrixBuilder
             }
         }
 
+        $judge = $rule !== null
+            && in_array('runtime', $filters->classes, true)
+            && in_array('load', $filters->classes, true);
+
         $rows = [];
         foreach ($devices as $deviceId => $entry) {
             $info = $entry['info'];
+            $cells = $entry['cells'];
+
+            $suspect = $judge
+                ? SuspectBattery::evaluate($rule, $cells['runtime']->value ?? null, $cells['load']->value ?? null, $cells['charge']->value ?? null)
+                : null;
+
+            if ($filters->suspect && $suspect !== true) {
+                continue;
+            }
+
             $rows[] = new MatrixRow(
                 (int) $deviceId,
                 $info->hostname,
@@ -40,7 +57,8 @@ final class MatrixBuilder
                 $info->location,
                 $info->os,
                 $info->deviceUp,
-                $entry['cells'],
+                $cells,
+                $suspect,
             );
         }
 

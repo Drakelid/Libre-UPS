@@ -660,3 +660,70 @@ FK-13 (dashboard-widget) utgår: pluginsystemet har ingen widget-hook, og widget
 - [ ] Enhetssiden for en UPS viser panelet «UPS Battery».
 - [ ] Med språk «Norsk (bokmål)» er menyvalg, side og innstillinger oversatt.
 - [ ] Automatisk oppdatering henter nye data uten å miste filtre, og kan skrus av i innstillingene (0).
+
+## 14. Forbedringer etter andre kodegjennomgang
+
+Dette kapittelet gjelder foran kapittel 1–13 der de er uenige. Det beskriver rettelser og utvidelser etter en gjennomgang av den første versjonen.
+
+### 14.1 Rettelser
+
+| ID | Endring |
+| --- | --- |
+| R-5 | Runtime 0 vises som «0 min». LibreNMS sin egen formatering gir tom tekst for 0, så en UPS uten batteritid igjen fikk en blank celle. Pluginen formaterer runtime selv (`RuntimeFormatter`): «0 min», «45 min», «1 h 5 min», «2 d 3 h». |
+| R-6 | Om en rad er ferdig lastet avgjøres av feltet `ReportRow::$hydrated`, ikke av om verdien er en tom tekst. |
+| R-7 | Pluginens terskler sammenlignes med verdien LibreNMS lagrer (minutter, %, °C), ikke med verdien som vises. Reglene gir da samme resultat for alle brukere, også de som har valgt °F. LibreNMS sine egne sensorgrenser konverteres fortsatt til brukerens enhet. |
+| R-8 | Oppsummeringslinjen viser runtime som varighet («min 4 min · median 22 min · maks 1 h 1 min»). |
+| R-9 | CI kjører Pest selv om Pint feiler, og kodestilen er rettet slik at Pint passerer. |
+
+### 14.2 Nye funksjoner
+
+| ID | Funksjon | Beskrivelse |
+| --- | --- | --- |
+| FK-22 | Mistenkelige batterier | Et batteri er mistenkelig når runtime er under grensen samtidig som lasten er lav og batteriet er ladet. Regel (`SuspectRule`, `SuspectBattery`): `runtime < suspect_runtime` OG `load <= suspect_max_load` OG (`charge` ukjent ELLER `charge >= suspect_min_charge`). Standard 10 min, 30 %, 95 %. Kan ikke avgjøres uten runtime og load (verdien er da `null`). Vises som kolonnen «Battery» i sammenligningsvisningen (`suspect` i JSON, `suspect_battery` i CSV), som filteret «Suspect batteries only» (`suspect=1`, krever runtime og load blant måleverdiene), som varsel på enhetskortet og i ukerapporten. Enhetens verdier er kortest runtime, høyest load og lavest charge. |
+| FK-23 | Filter på sensornavn | Parameteren `sensor` filtrerer på `sensors.sensor_descr` (inneholder, maks 100 tegn) i begge visninger. I sammenligningsvisningen gjelder filteret alle valgte måleverdier. |
+| FK-24 | Varslingsregler fra terskler | Innstillingssiden viser for lagrede terskler tilsvarende LibreNMS-regel (`AlertRuleHint`) som kan limes inn under Alerts > Alert Rules > Create rule > Advanced. Kritisk regel: `macros.device_up = 1 AND sensors.sensor_class = "runtime" AND sensors.sensor_current < 10`. Advarselsregelen utelater det kritiske området, slik at en sensor aldri utløser begge. Pluginen oppretter ingen varsler selv. |
+| FK-25 | Ukentlig e-postrapport | Artisan-kommandoen `ups-battery:report` (`--to=`, `--dry-run`) sender en HTML-e-post med antall enheter og kritiske, advarsler og mistenkelige, en tabell med kortest runtime (topp 10, 25, 50 eller 100) og tabell over mistenkelige batterier. Kommandoen kjøres av Laravel-planleggeren i LibreNMS (`weeklyOn`) når innstillingene `report_enabled` og minst én gyldig mottaker i `report_recipients` finnes; dag (`report_day`, 0 = søndag), klokkeslett (`report_time`, TT:MM) og antall rader (`report_top`) er innstillinger. E-post sendes med `LibreNMS\Util\Mail::send` og LibreNMS sine e-postinnstillinger. Rapporten leser alle enheter (uten brukertilgang), siden den ikke kjøres av en bruker. |
+| FK-26 | Kioskvisning | `kiosk=1` i adressen, eller knappen «Kiosk view», skjuler filtre og forstørrer tabellen, slår på automatisk oppdatering (300 s hvis innstillingen er 0) og kan avsluttes med Esc eller knappen. Flagget lagres ikke i lagrede visninger. |
+| FK-27 | Eksporter alle rader | Egen lenke «Export all rows» laster ned CSV uten begrensning på antall rader (`limit=0`). |
+| FK-28 | Trendlenke | Hver sensor i enkeltvisningen har et ikon som åpner LibreNMS sin grafside for sensoren siste år (`trend_url`). Selve nedgangen over tid beregnes ikke av pluginen. |
+| FK-29 | Eget JavaScript | Sidens skript ligger i `resources/js/report.js` og leveres av ruten `plugin/ups-battery/assets/report.js`. Sidens data (adresser, tekster, standardverdier) ligger i `<script type="application/json" id="ub-config">`. |
+
+### 14.3 Nye eller endrede API-felt
+
+- `data` og `matrix` godtar `sensor`. `matrix` godtar `suspect` (`1`).
+- Rader i `data` har `trend_url`. Celler i `matrix` har `trend_url`, og hver enhet har `suspect` (`true`, `false` eller `null`).
+- `filters` i svarene har `sensor` (og `suspect` for `matrix`).
+- CSV for `matrix` har kolonnen `suspect_battery` (`yes`, `no` eller tom) når runtime og load er valgt.
+- Nye innstillinger: `suspect_runtime`, `suspect_max_load`, `suspect_min_charge`, `report_enabled`, `report_recipients`, `report_day`, `report_time`, `report_top`.
+- Nye lagrede nøkler i en visning: `sensor`, `suspect`.
+
+### 14.4 Nye filer
+
+`src/Report/`: `NumberFormat`, `RuntimeFormatter`, `SuspectRule`, `SuspectBattery`, `AlertRuleHint`, `ReportSchedule`, `WeeklyReport`. `src/Console/SendReport.php`. `resources/js/report.js`. `package.json`, `package-lock.json`, `tests/js/report.test.mjs`. `.github/workflows/integration.yml`. Alle klasser i `src/Report` unntatt `SensorReportService` er rene PHP-klasser med enhetstester.
+
+### 14.5 Testing
+
+- Pest (PHP): enhetstester for alle rene klasser, språkfilene (samme nøkler og `:plassholdere` på engelsk og norsk, og at alle tekster som visninger og skript bruker finnes) og visningene (hver Blade-fil kompileres til gyldig PHP med `illuminate/view`, rutenavn og kontrollermetoder finnes, og hver `id` skriptet slår opp finnes i siden).
+- JavaScript: `npm test` laster sidens egen markup i jsdom med `fetch` erstattet, og kjører `report.js` gjennom enkeltvisning, sammenligningsvisning, mistenkelig-filter, sensornavn, eksportlenker, kiosk, lagrede visninger, feilmeldinger og at tekst fra serveren ikke tolkes som HTML.
+- CI (`ci.yml`): PHP 8.2–8.4 (syntaks, Pint, Pest) og JavaScript (syntaks, jsdom-tester).
+- `integration.yml` (manuell og ukentlig): installerer pluginen i en ekte LibreNMS og sjekker at den er registrert og aktiv, at rutene og kommandoen finnes, at alle visninger kompileres, og at ukerapporten kjører mot tom database. Ikke kjørt ennå.
+- Det som fortsatt krever en ekte LibreNMS med data er spørringene i `SensorReportService`, kontrolleren, hookene og den ferdig rendrede siden. De sjekkes med `scripts/verify.sh` og kriteriene under.
+
+### 14.6 Utgått eller ikke gjort
+
+- Beregning av batteriets nedgang over tid («runtime for 30 og 90 dager siden mot nå») er ikke gjort. Den ville kreve at pluginen leser RRD-filene direkte (`rrdtool fetch`), noe som avhenger av oppsett med rrdcached, distribuerte pollere og andre lagringsmotorer og ikke lar seg verifisere her. Trendlenken til LibreNMS sin graf dekker behovet foreløpig.
+- Dashboard-widget (FK-13) er fortsatt ikke mulig som plugin.
+
+### 14.7 Tilleggskriterier for akseptanse
+
+- [ ] En UPS med runtime 0 viser «0 min» i tabellen, og raden er rød når grensene tilsier det.
+- [ ] I sammenligningsvisningen med runtime, load og charge får en UPS med kort runtime, lav last og full lading merket «Suspect»; en UPS med kort runtime og høy last får det ikke.
+- [ ] Avkrysningen «Suspect batteries only» viser kun mistenkelige UPS-er og er utilgjengelig uten runtime og load.
+- [ ] Filteret «Sensor name» på «replace» eller lignende finner de sensorene det skal, i begge visninger.
+- [ ] Innstillingssiden viser tilsvarende varslingsregler for lagrede terskler, og reglene kan limes inn i Alert Rules.
+- [ ] `php artisan ups-battery:report --dry-run` skriver emne og HTML uten å sende e-post; uten `--dry-run` kommer e-posten til mottakerne.
+- [ ] Med ukerapporten slått på og planleggeren kjørende sendes e-posten på valgt dag og tidspunkt.
+- [ ] `?kiosk=1` åpner siden uten filtre med forstørret tabell; Esc avslutter.
+- [ ] «Export all rows» gir alle rader uavhengig av «Show»-valget.
+- [ ] Trendikonet åpner LibreNMS sin grafside for riktig sensor.
+- [ ] En bruker med °F ser samme alvorlighetsfarge som en bruker med °C for samme terskelregel på temperatur.

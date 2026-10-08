@@ -8,6 +8,7 @@ Route::middleware(['web', 'auth'])->prefix('plugin/ups-battery')->group(function
     Route::get('data', [ReportController::class, 'data'])->name('ups-battery.data');
     Route::get('matrix', [ReportController::class, 'matrix'])->name('ups-battery.matrix');
     Route::get('options', [ReportController::class, 'options'])->name('ups-battery.options');
+    Route::get('assets/report.js', [ReportController::class, 'script'])->name('ups-battery.script');
 
     Route::get('views', [ReportController::class, 'views'])->name('ups-battery.views');
     Route::post('views', [ReportController::class, 'saveView'])->name('ups-battery.views.save');

@@ -1,0 +1,131 @@
+# Installs the plugin into a real LibreNMS and checks that it boots there: the provider registers, the routes and
+# the console command exist and every Blade view compiles under the real framework.
+#
+# Not part of the normal CI run: it needs network access to LibreNMS and Packagist and is slower. Run it by hand
+# (Actions > LibreNMS integration > Run workflow, optionally with a LibreNMS tag or branch) or wait for the weekly run
+# that tells you when a new LibreNMS release breaks the plugin.
+#
+# Status: written from LibreNMS' own test workflow but not run yet. If a step fails, the log and the uploaded
+# librenms.log say where, and the steps are small enough to adjust one at a time.
+
+name: LibreNMS integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      librenms_ref:
+        description: LibreNMS branch, tag or commit to test against
+        default: master
+  schedule:
+    - cron: '17 5 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Install into LibreNMS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mariadb:
+        image: mariadb:lts
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: librenms
+          MARIADB_USER: librenms
+          MARIADB_PASSWORD: librenms
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    steps:
+      - name: Check out the plugin
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Check out LibreNMS
+        uses: actions/checkout@v4
+        with:
+          repository: librenms/librenms
+          ref: ${{ inputs.librenms_ref || 'master' }}
+          path: librenms
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, gd, gmp, ldap, mbstring, pdo_mysql, posix, simplexml, sockets, xml, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Configure LibreNMS
+        working-directory: librenms
+        run: |
+          cat > .env <<'EOL'
+          APP_KEY=base64:vHI+YHgkyCDad31iPEErGSNEOWO21wNzV+zyENKQv04=
+          APP_URL=http://127.0.0.1:8000
+          APP_ENV=testing
+          APP_DEBUG=true
+          DB_DRIVER=mysql
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_DATABASE=librenms
+          DB_USERNAME=librenms
+          DB_PASSWORD=librenms
+          EOL
+
+      - name: Install LibreNMS dependencies
+        working-directory: librenms
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Create the database
+        working-directory: librenms
+        run: php artisan migrate --force
+
+      - name: Install the plugin like a user would
+        working-directory: librenms
+        run: |
+          composer config repositories.ups-battery '{"type":"path","url":"../plugin","options":{"symlink":true}}'
+          php lnms plugin:add drakelid/librenms-ups-battery @dev
+
+      - name: The plugin is registered and enabled
+        working-directory: librenms
+        run: |
+          grep -F '"drakelid/librenms-ups-battery"' composer.plugins.json
+          php artisan tinker --execute='echo "ACTIVE=".(int) App\Models\Plugin::where("plugin_name", "ups-battery")->value("plugin_active").PHP_EOL;' | tee /tmp/state.txt
+          grep -q 'ACTIVE=1' /tmp/state.txt
+
+      - name: The routes exist
+        working-directory: librenms
+        run: |
+          php artisan route:list --json --path=plugin/ups-battery > /tmp/routes.json
+          for name in report data matrix options views views.save views.delete script; do
+            grep -q "ups-battery.$name" /tmp/routes.json || { echo "::error::route ups-battery.$name is missing"; exit 1; }
+          done
+
+      - name: The console command exists
+        working-directory: librenms
+        run: php lnms list --raw | grep -q '^ups-battery:report'
+
+      - name: Every Blade view compiles
+        working-directory: librenms
+        run: php artisan view:cache
+
+      - name: The weekly report runs against an empty database
+        working-directory: librenms
+        run: php lnms ups-battery:report --dry-run | head -c 2000
+
+      - name: Upload the LibreNMS log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: librenms-log
+          path: librenms/logs/librenms.log
+          if-no-files-found: ignore

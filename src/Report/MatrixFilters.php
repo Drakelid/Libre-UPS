@@ -15,18 +15,20 @@ final readonly class MatrixFilters
 
     /**
      * @param  string[]  $classes
+     * @param  bool  $suspect  Only show devices whose battery is suspect (needs the runtime and load metrics).
      */
     public function __construct(
         public ?string $type,
         public ?string $os,
         public ?int $group,
         public ?string $q,
+        public ?string $sensor,
         public array $classes,
         public string $sort,
         public string $dir,
         public int $limit,
-    ) {
-    }
+        public bool $suspect = false,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $input  Raw query parameters.
@@ -46,6 +48,7 @@ final readonly class MatrixFilters
 
         $group = InputParser::parseGroup($input['group'] ?? null);
         $q = InputParser::parseSearch($input['q'] ?? null);
+        $sensor = InputParser::parseSearch($input['sensor'] ?? null, 'sensor');
 
         $classes = self::parseClasses($input['classes'] ?? null)
             ?? self::parseClasses($defaults['classes'] ?? null)
@@ -68,7 +71,12 @@ final readonly class MatrixFilters
 
         $limit = InputParser::parseLimit($input['limit'] ?? null, $defaults['limit'] ?? null);
 
-        return new self($type, $os, $group, $q, $classes, $sort, $dir, $limit);
+        $suspect = InputParser::parseFlag($input['suspect'] ?? null);
+        if ($suspect && (! in_array('runtime', $classes, true) || ! in_array('load', $classes, true))) {
+            throw new InvalidArgumentException('The suspect battery filter needs the runtime and load metrics.');
+        }
+
+        return new self($type, $os, $group, $q, $sensor, $classes, $sort, $dir, $limit, $suspect);
     }
 
     /** @return array<string, string|int> */
@@ -80,9 +88,11 @@ final readonly class MatrixFilters
             'os' => $this->os ?? '',
             'group' => $this->group ?? '',
             'q' => $this->q ?? '',
+            'sensor' => $this->sensor ?? '',
             'sort' => $this->sort,
             'dir' => $this->dir,
             'limit' => $this->limit,
+            'suspect' => $this->suspect ? '1' : '',
         ];
     }
 
@@ -94,10 +104,12 @@ final readonly class MatrixFilters
             'os' => $this->os,
             'group' => $this->group,
             'q' => $this->q,
+            'sensor' => $this->sensor,
             'classes' => $this->classes,
             'sort' => $this->sort,
             'dir' => $this->dir,
             'limit' => $this->limit,
+            'suspect' => $this->suspect,
         ];
     }
 

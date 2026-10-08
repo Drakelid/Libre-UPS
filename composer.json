@@ -9,6 +9,7 @@
         "librenms/plugin-interfaces": "^1.0"
     },
     "require-dev": {
+        "illuminate/view": "^11.0 || ^12.0",
         "laravel/pint": "^1.13",
         "pestphp/pest": "^3.0"
     },

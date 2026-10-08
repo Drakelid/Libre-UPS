@@ -64,7 +64,7 @@ fi
 
 step "Blade views compile"
 if php artisan view:cache >/tmp/ups-battery-view-cache.log 2>&1; then
-    ok "views compiled (including ups-battery::report, ::menu, ::settings)"
+    ok "views compiled (including ups-battery::report, ::menu, ::settings, ::device-overview)"
 else
     bad "view compilation failed: $(tail -n 5 /tmp/ups-battery-view-cache.log)"
 fi
@@ -101,9 +101,17 @@ echo "TOTAL ".$p["total"]." SHOWN ".count($p["rows"])." UNIT ".$p["unit"]." SUMM
 foreach ($p["rows"] as $r) { echo "  ".$r->hostname."\t".$r->sensorDescr."\t".$r->valueFormatted."\t".$r->severity->value."\t".$r->deviceUrl."\t".$r->sensorUrl.PHP_EOL; }
 echo "graph: ".($p["rows"][0]->graphUrl ?? "-").PHP_EOL;
 echo "--- csv ---".PHP_EOL.substr((new Drakelid\UpsBattery\Report\CsvFormatter())->toCsv($p["rows"]), 0, 500).PHP_EOL;
-$m = $svc->matrix($user, Drakelid\UpsBattery\Report\MatrixFilters::fromArray(["type" => "", "classes" => "runtime,load,charge", "limit" => "5"], []), $settings->thresholds);
+$empty = 0; foreach ($p["rows"] as $r) { if ($r->valueFormatted === "") { $empty++; } }
+echo "rows with an empty formatted value: ".$empty." (must be 0)".PHP_EOL;
+echo "trend: ".($p["rows"][0]->trendUrl ?? "-").PHP_EOL;
+$m = $svc->matrix($user, Drakelid\UpsBattery\Report\MatrixFilters::fromArray(["type" => "", "classes" => "runtime,load,charge", "limit" => "5"], []), $settings->thresholds, $settings->suspectRule);
 echo "--- matrix (runtime, load, charge) --- total ".$m["total"].PHP_EOL;
-foreach ($m["rows"] as $row) { $cells = []; foreach (["runtime", "load", "charge"] as $c) { $cells[] = $c."=".(isset($row->cells[$c]) ? $row->cells[$c]->valueFormatted."/".$row->cells[$c]->severity->value : "-"); } echo "  ".$row->hostname."\t".implode("\t", $cells).PHP_EOL; }
+foreach ($m["rows"] as $row) { $cells = []; foreach (["runtime", "load", "charge"] as $c) { $cells[] = $c."=".(isset($row->cells[$c]) ? $row->cells[$c]->valueFormatted."/".$row->cells[$c]->severity->value : "-"); } echo "  ".$row->hostname."\t".implode("\t", $cells)."\tsuspect=".json_encode($row->suspect).PHP_EOL; }
+$sus = $svc->matrix($user, Drakelid\UpsBattery\Report\MatrixFilters::fromArray(["type" => "", "classes" => "runtime,load,charge", "suspect" => "1", "limit" => "0"], []), $settings->thresholds, $settings->suspectRule);
+echo "suspect batteries (runtime < ".$settings->suspectRule->maxRuntime." min, load <= ".$settings->suspectRule->maxLoad." %, charge >= ".$settings->suspectRule->minCharge." %): ".$sus["total"].PHP_EOL;
+foreach ($sus["rows"] as $row) { echo "  ".$row->hostname.PHP_EOL; }
+$named = $svc->report($user, Drakelid\UpsBattery\Report\ReportFilters::fromArray(["type" => "", "class" => getenv("UB_CLASS"), "sensor" => "a", "limit" => "10"], []), $settings->thresholds);
+echo "sensor name filter (contains a): ".$named["total"]." of ".$p["total"].PHP_EOL;
 $first = $p["rows"][0] ?? null;
 if ($first) { $dev = App\Models\Device::find($first->deviceId); echo "device card rows for ".$first->hostname.": ".count($svc->forDevice($dev, $user, $settings->thresholds)).PHP_EOL; }
 echo "SMOKE_DONE".PHP_EOL;
@@ -115,6 +123,14 @@ elif grep -q 'NO_SUCH_USER' /tmp/ups-battery-smoke.log; then
     bad "no LibreNMS user named '$USERNAME'"
 else
     bad "smoke test failed, see output above"
+fi
+
+step "Weekly report (dry run, nothing is sent)"
+if report_out="$(php artisan ups-battery:report --dry-run 2>&1)"; then
+    ok "ups-battery:report runs"
+    printf '%s\n' "$report_out" | head -n 1 | sed 's/^/         subject: /'
+else
+    bad "ups-battery:report failed: $(printf '%s\n' "$report_out" | tail -n 5)"
 fi
 
 step "Result"

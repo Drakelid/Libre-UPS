@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Plugins\Hooks\DeviceOverviewHook;
 use Drakelid\UpsBattery\Report\PluginSettings;
 use Drakelid\UpsBattery\Report\SensorReportService;
+use Drakelid\UpsBattery\Report\SuspectBattery;
 
 /** Battery card on the device overview page, shown only for devices that have runtime, charge or load sensors. */
 class DeviceOverview extends DeviceOverviewHook
@@ -36,12 +37,15 @@ class DeviceOverview extends DeviceOverviewHook
         /** @var User $user */
         $user = auth()->user();
 
+        $rows = $service->forDevice($device, $user, $pluginSettings->thresholds);
+
         return [
             'title' => 'UPS Battery',
             'device' => $device,
             'locale' => $pluginSettings->language,
             'staleMinutes' => $pluginSettings->staleMinutes,
-            'rows' => $service->forDevice($device, $user, $pluginSettings->thresholds),
+            'rows' => $rows,
+            'suspect' => SuspectBattery::evaluateRows($pluginSettings->suspectRule, $rows),
         ];
     }
 }

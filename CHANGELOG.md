@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A runtime of 0 showed a blank value. LibreNMS' own formatter returns an empty string for 0, and the page used an empty formatted value to mean "not loaded yet". Runtime is now formatted by the plugin (`0 min`, `45 min`, `1 h 5 min`, `2 d 3 h`), and whether a row is loaded is tracked by an explicit `hydrated` flag.
+- Plugin thresholds are compared with the value LibreNMS stores (minutes, %, °C) instead of the value converted to the user's temperature unit, so the same rule gives the same colour for every user. (Temperature thresholds written in °F against the previous build need converting to °C.)
+- The summary line shows runtime as a duration instead of "4 Min".
+- CI ran Pest only when Pint passed, so a style problem hid the test results; the code style now passes Pint and both always run.
+
+### Added
+
+- **Suspect batteries:** runtime below a limit although the load is low and the battery is charged (limits in the settings, 10 min / 30 % / 95 % by default). Shown as a "Battery" column and a "Suspect batteries only" filter in the compare view, as a warning on the device page, in the weekly report and as a `suspect_battery` CSV column.
+- **Sensor name filter** (`sensor`) in both views.
+- **Alert rule hints:** the settings page lists the LibreNMS alert rules that match the saved thresholds, ready to paste into *Alerts > Alert Rules*.
+- **Weekly email report** and the `ups-battery:report` command (`--dry-run`, `--to`), scheduled through LibreNMS' scheduler on a day and time chosen in the settings; settings for recipients and number of rows.
+- **Kiosk view** (`kiosk=1` or a button) for wall screens, and an "Export all rows" link that ignores the row limit.
+- **Trend link** from every sensor to the LibreNMS graph for the last year (`trend_url` in the JSON).
+- `resources/js/report.js`: the page script is now a file of its own, served by the plugin (`plugin/ups-battery/assets/report.js`) instead of 500 lines inside the Blade view.
+- Tests: Pest tests for the new classes, the language files (same keys and placeholders in both languages, every text that is used exists), the Blade views (every view is compiled to valid PHP with `illuminate/view`), route names, controller methods and page element ids; and 20 jsdom tests (`npm test`) that run the page script against the real page markup with `fetch` mocked.
+- CI: a JavaScript job (syntax check and jsdom tests) next to the PHP job, and `integration.yml`, a manual and weekly workflow that installs the plugin into a real LibreNMS.
+- `scripts/verify.sh` also checks the suspect battery logic, the sensor name filter, empty formatted values and the weekly report dry run.
+
+### Changed
+
+- `scripts/install.sh` decides whether the plugin is installed by reading `composer.plugins.json` instead of searching it as text, and no longer prints "package installed" in a dry run.
+- `SensorReportService::report()` and `matrix()` accept a null user for system jobs such as the weekly email (no per-user access filtering); `matrix()` takes the suspect rule.
+
+### Known limits
+
+- The decline of a battery over time ("runtime 30 and 90 days ago against now") is not calculated. It would mean reading the RRD files directly, which depends on rrdcached, distributed pollers and other storage backends and cannot be verified here. The trend link opens LibreNMS' own graph instead.
+- `SensorReportService`, the controller, the hooks and the rendered pages are still only checked against a real LibreNMS by `scripts/verify.sh`. `integration.yml` has not been run yet.
+
 ## [1.0.0] - 2026-10-08
 
 First release.

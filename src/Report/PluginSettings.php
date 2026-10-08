@@ -25,8 +25,9 @@ final readonly class PluginSettings
         public int $refreshSeconds,
         public int $staleMinutes,
         public string $language,
-    ) {
-    }
+        public SuspectRule $suspectRule,
+        public ReportSchedule $report,
+    ) {}
 
     /** @param  array<string, mixed>  $raw  The settings array stored by LibreNMS (may be empty or contain bad values). */
     public static function fromArray(array $raw): self
@@ -62,6 +63,12 @@ final readonly class PluginSettings
             self::refreshSeconds($raw['refresh_seconds'] ?? null),
             self::boundedInt($raw['stale_minutes'] ?? null, 1, 1440, self::DEFAULT_STALE_MINUTES),
             $language,
+            new SuspectRule(
+                self::boundedFloat($raw['suspect_runtime'] ?? null, 1, 1000, SuspectRule::DEFAULT_MAX_RUNTIME),
+                self::boundedFloat($raw['suspect_max_load'] ?? null, 0, 100, SuspectRule::DEFAULT_MAX_LOAD),
+                self::boundedFloat($raw['suspect_min_charge'] ?? null, 0, 100, SuspectRule::DEFAULT_MIN_CHARGE),
+            ),
+            ReportSchedule::fromArray($raw),
         );
     }
 
@@ -102,6 +109,17 @@ final readonly class PluginSettings
         }
 
         return max(30, min(3600, $value));
+    }
+
+    private static function boundedFloat(mixed $raw, float $min, float $max, float $default): float
+    {
+        if (! is_scalar($raw) || ! is_numeric(str_replace(',', '.', (string) $raw))) {
+            return $default;
+        }
+
+        $value = (float) str_replace(',', '.', (string) $raw);
+
+        return $value < $min || $value > $max ? $default : $value;
     }
 
     private static function boundedInt(mixed $raw, int $min, int $max, int $default): int

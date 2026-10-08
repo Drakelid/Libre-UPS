@@ -21,9 +21,7 @@ final class Thresholds
      * @param  array<string, array{critical: array{0: string, 1: float}, warning: ?array{0: string, 1: float}}>  $rules
      * @param  string[]  $errors
      */
-    private function __construct(private readonly array $rules, private readonly array $errors)
-    {
-    }
+    private function __construct(private readonly array $rules, private readonly array $errors) {}
 
     public static function empty(): self
     {
@@ -72,6 +70,16 @@ final class Thresholds
     public function has(string $class): bool
     {
         return isset($this->rules[$class]);
+    }
+
+    /**
+     * The parsed rules per class. A rule is [operator, number]; the warning rule is null when the line had none.
+     *
+     * @return array<string, array{critical: array{0: string, 1: float}, warning: ?array{0: string, 1: float}}>
+     */
+    public function rules(): array
+    {
+        return $this->rules;
     }
 
     /** @return string[] */

@@ -52,6 +52,20 @@ final class InputParser
         }
     }
 
+    /** Checkbox-like flag: "1", "true", "yes" and "on" are true, everything else (including empty) is false. */
+    public static function parseFlag(mixed $raw): bool
+    {
+        if (is_bool($raw)) {
+            return $raw;
+        }
+
+        if (! is_scalar($raw)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim((string) $raw)), ['1', 'true', 'yes', 'on'], true);
+    }
+
     /** @throws InvalidArgumentException */
     public static function parseGroup(mixed $raw): ?int
     {
@@ -90,9 +104,9 @@ final class InputParser
     }
 
     /** Free-text search: trimmed, empty becomes null, cut at MAX_QUERY_LENGTH characters. */
-    public static function parseSearch(mixed $raw): ?string
+    public static function parseSearch(mixed $raw, string $name = 'q'): ?string
     {
-        $q = self::nullableString($raw, 'q');
+        $q = self::nullableString($raw, $name);
         if ($q !== null && mb_strlen($q) > self::MAX_QUERY_LENGTH) {
             $q = mb_substr($q, 0, self::MAX_QUERY_LENGTH);
         }

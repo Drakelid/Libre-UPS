@@ -15,6 +15,7 @@
         </include>
         <exclude>
             <file>src/UpsBatteryProvider.php</file>
+            <directory>src/Console</directory>
             <directory>src/Hooks</directory>
             <directory>src/Http</directory>
             <file>src/Report/SensorReportService.php</file>

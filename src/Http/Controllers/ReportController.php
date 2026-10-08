@@ -16,6 +16,7 @@ use Drakelid\UpsBattery\Report\SavedViews;
 use Drakelid\UpsBattery\Report\SensorReportService;
 use Drakelid\UpsBattery\Report\Summary;
 use Drakelid\UpsBattery\Report\TooManyRowsException;
+use Drakelid\UpsBattery\Report\Urls;
 use Drakelid\UpsBattery\UpsBatteryProvider;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -23,15 +24,16 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use InvalidArgumentException;
 use LibreNMS\Interfaces\Plugins\PluginManagerInterface;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
     private const VIEWS_PREFERENCE = 'ups-battery.views';
 
-    public function __construct(private readonly SensorReportService $service)
-    {
-    }
+    private const SCRIPT_PATH = __DIR__.'/../../../resources/js/report.js';
+
+    public function __construct(private readonly SensorReportService $service) {}
 
     public function page(Request $request): View
     {
@@ -44,6 +46,16 @@ class ReportController extends Controller
             'refreshSeconds' => $settings->refreshSeconds,
             'staleMinutes' => $settings->staleMinutes,
             'matrixDefaults' => MatrixFilters::DEFAULT_CLASSES,
+            'scriptUrl' => Urls::relative(route('ups-battery.script')).'?v='.(@filemtime(self::SCRIPT_PATH) ?: 1),
+        ]);
+    }
+
+    /** The page's JavaScript, served as a file of its own so it can be linted and cached by the browser. */
+    public function script(): BinaryFileResponse
+    {
+        return response()->file(self::SCRIPT_PATH, [
+            'Content-Type' => 'application/javascript; charset=UTF-8',
+            'Cache-Control' => 'private, max-age=86400',
         ]);
     }
 
@@ -89,7 +101,7 @@ class ReportController extends Controller
         }
 
         if ($format === 'csv') {
-            $csv = (new CsvFormatter())->toCsv($processed['rows']);
+            $csv = (new CsvFormatter)->toCsv($processed['rows']);
 
             return $this->download($csv, sprintf('ups-battery-%s-%s.csv', $filters->class, date('Ymd-Hi')));
         }
@@ -123,13 +135,13 @@ class ReportController extends Controller
                 $filters->classes,
             );
 
-            $result = $this->service->matrix($user, $filters, $settings->thresholds);
+            $result = $this->service->matrix($user, $filters, $settings->thresholds, $settings->suspectRule);
         } catch (InvalidArgumentException|TooManyRowsException $e) {
             return $this->error($e->getMessage());
         }
 
         if ($format === 'csv') {
-            $csv = (new CsvFormatter())->matrixToCsv($result['rows'], $filters->classes);
+            $csv = (new CsvFormatter)->matrixToCsv($result['rows'], $filters->classes);
 
             return $this->download($csv, sprintf('ups-battery-compare-%s.csv', date('Ymd-Hi')));
         }

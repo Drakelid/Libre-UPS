@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 use Drakelid\UpsBattery\Report\MatrixBuilder;
 use Drakelid\UpsBattery\Report\MatrixRow;
+use Drakelid\UpsBattery\Report\ReportRow;
 
 /**
  * Two devices with two sensors per class, plus a third device that only has a runtime sensor.
  *
- * @return array<string, array<int, \Drakelid\UpsBattery\Report\ReportRow>>
+ * @return array<string, array<int, ReportRow>>
  */
 function matrixFixture(): array
 {
@@ -34,7 +35,7 @@ function matrixHostnames(array $rows): array
 }
 
 it('builds one row per device with the worst sensor per metric', function (): void {
-    $result = (new MatrixBuilder())->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
+    $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
 
     $a = $result['rows'][0];
 
@@ -45,7 +46,7 @@ it('builds one row per device with the worst sensor per metric', function (): vo
 });
 
 it('leaves out cells for metrics a device has no sensor for', function (): void {
-    $result = (new MatrixBuilder())->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
+    $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
 
     $c = array_values(array_filter($result['rows'], fn (MatrixRow $r): bool => $r->hostname === 'ups-c'))[0];
 
@@ -53,7 +54,7 @@ it('leaves out cells for metrics a device has no sensor for', function (): void 
 });
 
 it('sorts by the first metric with its default direction', function (): void {
-    $result = (new MatrixBuilder())->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
+    $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
 
     expect(matrixHostnames($result['rows']))->toBe(['ups-a', 'ups-c', 'ups-b']); // 5, 15, 20 minutes
 });
@@ -61,7 +62,7 @@ it('sorts by the first metric with its default direction', function (): void {
 it('sorts by another metric and puts devices without it last in both directions', function (string $dir, array $expected): void {
     $filters = makeMatrixFilters(['classes' => 'runtime,load', 'sort' => 'load', 'dir' => $dir, 'limit' => '0']);
 
-    expect(matrixHostnames((new MatrixBuilder())->build(matrixFixture(), $filters)['rows']))->toBe($expected);
+    expect(matrixHostnames((new MatrixBuilder)->build(matrixFixture(), $filters)['rows']))->toBe($expected);
 })->with([
     'descending' => ['desc', ['ups-a', 'ups-b', 'ups-c']],
     'ascending' => ['asc', ['ups-b', 'ups-a', 'ups-c']],
@@ -75,7 +76,7 @@ it('sorts by hostname naturally', function (): void {
         ],
     ];
 
-    $result = (new MatrixBuilder())->build($rows, makeMatrixFilters(['classes' => 'runtime', 'sort' => 'hostname', 'limit' => '0']));
+    $result = (new MatrixBuilder)->build($rows, makeMatrixFilters(['classes' => 'runtime', 'sort' => 'hostname', 'limit' => '0']));
 
     expect(matrixHostnames($result['rows']))->toBe(['ups-2', 'ups-10']);
 });
@@ -88,13 +89,13 @@ it('puts a missing location last when sorting by location', function (string $di
         ],
     ];
 
-    $result = (new MatrixBuilder())->build($rows, makeMatrixFilters(['classes' => 'runtime', 'sort' => 'location', 'dir' => $dir, 'limit' => '0']));
+    $result = (new MatrixBuilder)->build($rows, makeMatrixFilters(['classes' => 'runtime', 'sort' => 'location', 'dir' => $dir, 'limit' => '0']));
 
     expect(matrixHostnames($result['rows'])[1])->toBe('none');
 })->with(['asc', 'desc']);
 
 it('limits rows but reports the full total', function (): void {
-    $result = (new MatrixBuilder())->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '10']));
+    $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '10']));
     expect($result['rows'])->toHaveCount(3);
 
     $rows = ['runtime' => []];
@@ -102,7 +103,7 @@ it('limits rows but reports the full total', function (): void {
         $rows['runtime'][] = makeRow(['deviceId' => $i, 'sensorId' => $i, 'hostname' => "ups-$i", 'value' => (float) $i]);
     }
 
-    $limited = (new MatrixBuilder())->build($rows, makeMatrixFilters(['classes' => 'runtime', 'limit' => '10']));
+    $limited = (new MatrixBuilder)->build($rows, makeMatrixFilters(['classes' => 'runtime', 'limit' => '10']));
 
     expect($limited['rows'])->toHaveCount(10)
         ->and($limited['total'])->toBe(30)
@@ -110,11 +111,11 @@ it('limits rows but reports the full total', function (): void {
 });
 
 it('handles no rows at all', function (): void {
-    expect((new MatrixBuilder())->build([], makeMatrixFilters()))->toBe(['rows' => [], 'total' => 0]);
+    expect((new MatrixBuilder)->build([], makeMatrixFilters()))->toBe(['rows' => [], 'total' => 0]);
 });
 
 it('exposes cells for every requested metric in toArray', function (): void {
-    $result = (new MatrixBuilder())->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
+    $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));
 
     $c = array_values(array_filter($result['rows'], fn (MatrixRow $r): bool => $r->hostname === 'ups-c'))[0]->toArray(['runtime', 'load']);
 
@@ -125,7 +126,7 @@ it('exposes cells for every requested metric in toArray', function (): void {
 });
 
 it('can swap the cells and device url', function (): void {
-    $result = (new MatrixBuilder())->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime', 'limit' => '0']));
+    $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime', 'limit' => '0']));
     $row = $result['rows'][0];
 
     $copy = $row->withCells([], '/device/1');

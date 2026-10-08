@@ -58,6 +58,10 @@ final class CsvFormatter
             $header[] = $class.'_severity';
         }
 
+        if ($this->hasSuspectColumn($classes)) {
+            $header[] = 'suspect_battery';
+        }
+
         return $header;
     }
 
@@ -80,7 +84,17 @@ final class CsvFormatter
             $line[] = $cell === null ? '' : $cell->severity->value;
         }
 
+        if ($this->hasSuspectColumn($classes)) {
+            $line[] = $row->suspect === null ? '' : ($row->suspect ? 'yes' : 'no');
+        }
+
         return $line;
+    }
+
+    /** The suspect battery verdict needs both runtime and load. */
+    private function hasSuspectColumn(array $classes): bool
+    {
+        return in_array('runtime', $classes, true) && in_array('load', $classes, true);
     }
 
     /**
@@ -130,12 +144,6 @@ final class CsvFormatter
     /** Decimal comma, no thousands separator, no trailing zeros. */
     private function formatNumber(float $value): string
     {
-        $text = rtrim(rtrim(number_format($value, 6, '.', ''), '0'), '.');
-
-        if ($text === '' || $text === '-') {
-            $text = '0';
-        }
-
-        return str_replace('.', ',', $text);
+        return NumberFormat::decimalComma($value);
     }
 }

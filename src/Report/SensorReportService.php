@@ -22,6 +22,9 @@ use Throwable;
  *
  * Rows are loaded in two phases: a cheap query without Eloquent hydration finds, sorts and summarises
  * all matching sensors; only the rows that are actually shown are then loaded as full models for formatting.
+ *
+ * Methods that take a nullable user run without access filtering when it is null. That is meant for
+ * system jobs such as the weekly email; every request made by a person passes the logged-in user.
  */
 final class SensorReportService
 {
@@ -158,10 +161,10 @@ final class SensorReportService
      *
      * @throws TooManyRowsException
      */
-    public function report(User $user, ReportFilters $filters, Thresholds $thresholds): array
+    public function report(?User $user, ReportFilters $filters, Thresholds $thresholds): array
     {
-        $rows = $this->loadRows($user, $filters->class, $filters->type, $filters->os, $filters->group, $filters->q, $thresholds);
-        $processed = (new RowProcessor())->process($rows, $filters, $filters->class === 'state');
+        $rows = $this->loadRows($user, $filters->class, $filters->type, $filters->os, $filters->group, $filters->q, $filters->sensor, $thresholds);
+        $processed = (new RowProcessor)->process($rows, $filters, $filters->class === 'state');
         $processed['rows'] = $this->hydrate($processed['rows']);
         $processed['unit'] = $this->classUnit($filters->class, $this->usesFahrenheit($user));
 
@@ -175,14 +178,14 @@ final class SensorReportService
      *
      * @throws TooManyRowsException
      */
-    public function matrix(User $user, MatrixFilters $filters, Thresholds $thresholds): array
+    public function matrix(?User $user, MatrixFilters $filters, Thresholds $thresholds, SuspectRule $rule): array
     {
         $rowsByClass = [];
         foreach ($filters->classes as $class) {
-            $rowsByClass[$class] = $this->loadRows($user, $class, $filters->type, $filters->os, $filters->group, $filters->q, $thresholds);
+            $rowsByClass[$class] = $this->loadRows($user, $class, $filters->type, $filters->os, $filters->group, $filters->q, $filters->sensor, $thresholds);
         }
 
-        $built = (new MatrixBuilder())->build($rowsByClass, $filters);
+        $built = (new MatrixBuilder)->build($rowsByClass, $filters, $rule);
 
         $cells = [];
         foreach ($built['rows'] as $row) {
@@ -258,10 +261,10 @@ final class SensorReportService
      *
      * @throws TooManyRowsException
      */
-    private function loadRows(User $user, string $class, ?string $type, ?string $os, ?int $group, ?string $q, Thresholds $thresholds): array
+    private function loadRows(?User $user, string $class, ?string $type, ?string $os, ?int $group, ?string $q, ?string $sensorName, Thresholds $thresholds): array
     {
         $fahrenheit = $this->usesFahrenheit($user);
-        $query = $this->baseQuery($user, $class, $type, $os, $group, $q)->limit(self::MAX_ROWS + 1);
+        $query = $this->baseQuery($user, $class, $type, $os, $group, $q, $sensorName)->limit(self::MAX_ROWS + 1);
 
         if ($class === 'state') {
             $sensors = $query
@@ -291,12 +294,13 @@ final class SensorReportService
         return $rows;
     }
 
-    private function baseQuery(User $user, string $class, ?string $type, ?string $os, ?int $group, ?string $q): Builder
+    private function baseQuery(?User $user, string $class, ?string $type, ?string $os, ?int $group, ?string $q, ?string $sensorName): Builder
     {
         $like = $q === null ? null : '%'.addcslashes($q, '%_\\').'%';
+        $sensorLike = $sensorName === null ? null : '%'.addcslashes($sensorName, '%_\\').'%';
 
         return Sensor::query()
-            ->hasAccess($user)
+            ->when($user, fn ($query) => $query->hasAccess($user))
             ->join('devices', 'devices.device_id', '=', 'sensors.device_id')
             ->leftJoin('locations', 'locations.id', '=', 'devices.location_id')
             ->where('sensors.sensor_class', $class)
@@ -305,6 +309,7 @@ final class SensorReportService
             ->when($type, fn ($query) => $query->where('devices.type', $type))
             ->when($os, fn ($query) => $query->where('devices.os', $os))
             ->when($group, fn ($query) => $query->inDeviceGroup($group))
+            ->when($sensorLike, fn ($query) => $query->where('sensors.sensor_descr', 'like', $sensorLike))
             ->when($like, fn ($query) => $query->where(fn ($w) => $w
                 ->where('devices.hostname', 'like', $like)
                 ->orWhere('devices.sysName', 'like', $like)
@@ -322,7 +327,8 @@ final class SensorReportService
 
     private function toLightRow(stdClass $item, string $class, bool $fahrenheit, Thresholds $thresholds): ReportRow
     {
-        $value = $this->convert($this->floatOrNull($item->sensor_current), $class, $fahrenheit);
+        $stored = $this->floatOrNull($item->sensor_current);
+        $value = $this->convert($stored, $class, $fahrenheit);
         $low = $this->convert($this->floatOrNull($item->sensor_limit_low), $class, $fahrenheit);
         $lowWarn = $this->convert($this->floatOrNull($item->sensor_limit_low_warn), $class, $fahrenheit);
         $warn = $this->convert($this->floatOrNull($item->sensor_limit_warn), $class, $fahrenheit);
@@ -343,12 +349,15 @@ final class SensorReportService
             value: $value,
             valueFormatted: '',
             unit: '',
-            severity: $thresholds->severity($class, $value) ?? Severity::fromLimits($value, $low, $lowWarn, $warn, $high),
+            // Plugin thresholds compare the stored value (°C for temperature), not the value shown to the user.
+            severity: $thresholds->severity($class, $stored) ?? Severity::fromLimits($value, $low, $lowWarn, $warn, $high),
             limitLow: $low,
             limitLowWarn: $lowWarn,
             limitWarn: $warn,
             limitHigh: $high,
             lastUpdate: $this->iso($item->lastupdate),
+            sensorClass: $class,
+            hydrated: false,
         );
     }
 
@@ -358,7 +367,8 @@ final class SensorReportService
         $device = $sensor->device;
         $class = (string) $sensor->sensor_class;
 
-        $value = $this->convert($this->floatOrNull($sensor->sensor_current), $class, $fahrenheit);
+        $stored = $this->floatOrNull($sensor->sensor_current);
+        $value = $this->convert($stored, $class, $fahrenheit);
         $low = $this->convert($this->floatOrNull($sensor->sensor_limit_low), $class, $fahrenheit);
         $lowWarn = $this->convert($this->floatOrNull($sensor->sensor_limit_low_warn), $class, $fahrenheit);
         $warn = $this->convert($this->floatOrNull($sensor->sensor_limit_warn), $class, $fahrenheit);
@@ -368,7 +378,7 @@ final class SensorReportService
             $generic = $sensor->currentTranslation()?->state_generic_value;
             $severity = Severity::fromStateGeneric($generic === null ? null : (int) $generic);
         } else {
-            $severity = $thresholds->severity($class, $value) ?? Severity::fromLimits($value, $low, $lowWarn, $warn, $high);
+            $severity = $thresholds->severity($class, $stored) ?? Severity::fromLimits($value, $low, $lowWarn, $warn, $high);
         }
 
         $location = $sensor->getAttributes()['location_name'] ?? null;
@@ -384,7 +394,7 @@ final class SensorReportService
             sensorId: (int) $sensor->sensor_id,
             sensorDescr: (string) $sensor->sensor_descr,
             value: $value,
-            valueFormatted: (string) $sensor->formatValue(),
+            valueFormatted: $this->formatValue($sensor, $stored),
             unit: (string) $sensor->unit(),
             severity: $severity,
             limitLow: $low,
@@ -394,6 +404,9 @@ final class SensorReportService
             lastUpdate: $this->iso($sensor->lastupdate),
             sensorUrl: Urls::relative((string) Url::sensorUrl($sensor)),
             graphUrl: $this->graphUrl($sensor),
+            trendUrl: $this->trendUrl($sensor),
+            sensorClass: $class,
+            hydrated: true,
         );
     }
 
@@ -408,7 +421,7 @@ final class SensorReportService
     {
         $ids = [];
         foreach ($rows as $row) {
-            if ($row->valueFormatted === '') {
+            if (! $row->hydrated) {
                 $ids[] = $row->sensorId;
             }
         }
@@ -420,7 +433,7 @@ final class SensorReportService
         $sensors = Sensor::query()->whereIntegerInRaw('sensor_id', $ids)->get()->keyBy('sensor_id');
 
         return array_map(function (ReportRow $row) use ($sensors): ReportRow {
-            if ($row->valueFormatted !== '') {
+            if ($row->hydrated) {
                 return $row;
             }
 
@@ -431,13 +444,29 @@ final class SensorReportService
             }
 
             return $row->withDisplay(
-                (string) $sensor->formatValue(),
+                $this->formatValue($sensor, $this->floatOrNull($sensor->sensor_current)),
                 (string) $sensor->unit(),
                 $this->deviceUrl($row->deviceId),
                 Urls::relative((string) Url::sensorUrl($sensor)),
                 $this->graphUrl($sensor),
+                $this->trendUrl($sensor),
             );
         }, $rows);
+    }
+
+    /**
+     * Text for a value. Runtime is formatted here because LibreNMS' formatter returns an empty string for 0
+     * (the most important value for a UPS) and is fed fractional minutes.
+     */
+    private function formatValue(Sensor $sensor, ?float $stored): string
+    {
+        if ((string) $sensor->sensor_class === 'runtime') {
+            $text = RuntimeFormatter::format($stored);
+
+            return $text === '' ? '-' : $text;
+        }
+
+        return (string) $sensor->formatValue();
     }
 
     private function deviceUrl(int $deviceId): string
@@ -457,9 +486,17 @@ final class SensorReportService
         ]));
     }
 
-    private function usesFahrenheit(User $user): bool
+    /** The LibreNMS graph page for the sensor over the last year, to see slow changes such as an ageing battery. */
+    private function trendUrl(Sensor $sensor): string
     {
-        return UserPref::getPref($user, 'temp_units') === 'f';
+        return Urls::relative(route('graphs', [
+            'path' => 'type='.$sensor->getGraphType().'/id='.$sensor->sensor_id.'/from=-1y',
+        ]));
+    }
+
+    private function usesFahrenheit(?User $user): bool
+    {
+        return $user !== null && UserPref::getPref($user, 'temp_units') === 'f';
     }
 
     /** Temperatures are converted so value, limits, sorting, summary and CSV match what the user sees. */

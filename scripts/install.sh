@@ -197,8 +197,11 @@ installed_version() {
     php -r "$PHP_INSTALLED" "$LIBRENMS_DIR" "$PACKAGE" 2>/dev/null
 }
 
+# True when LibreNMS lists the package as a plugin (composer.plugins.json, written by lnms plugin:add).
 is_registered() {
-    [ -f "$LIBRENMS_DIR/composer.plugins.json" ] && grep -Fq "\"$PACKAGE\"" "$LIBRENMS_DIR/composer.plugins.json"
+    [ -f "$LIBRENMS_DIR/composer.plugins.json" ] || return 1
+    php -r '$data = json_decode((string) file_get_contents($argv[1]), true); exit(isset($data["require"][$argv[2]]) ? 0 : 1);' \
+        "$LIBRENMS_DIR/composer.plugins.json" "$PACKAGE" 2>/dev/null
 }
 
 # Sets RESOLVED_KIND (stable|dev) and RESOLVED. Returns 1 when Packagist cannot be reached, 2 when no version exists.
@@ -379,7 +382,7 @@ if [ "$ACTION" != "skip" ]; then
         info "composer.json and composer.plugins.json are restored by composer when it fails."
         exit 1
     fi
-    ok "package installed"
+    [ "$DRY_RUN" -eq 1 ] || ok "package installed"
 
     # LibreNMS registers a new plugin as enabled the first time it boots, so a fresh install only needs
     # an explicit step when the user asked to leave it disabled.

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Drakelid\UpsBattery;
 
+use Drakelid\UpsBattery\Console\SendReport;
 use Drakelid\UpsBattery\Hooks\DeviceOverview;
 use Drakelid\UpsBattery\Hooks\MenuEntry;
 use Drakelid\UpsBattery\Hooks\Settings;
+use Drakelid\UpsBattery\Report\PluginSettings;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 use LibreNMS\Interfaces\Plugins\Hooks\DeviceOverviewHook;
 use LibreNMS\Interfaces\Plugins\Hooks\MenuEntryHook;
@@ -31,5 +34,17 @@ class UpsBatteryProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
         $this->loadViewsFrom(__DIR__.'/../resources/views', self::PLUGIN);
         $this->loadTranslationsFrom(__DIR__.'/../lang', self::PLUGIN);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([SendReport::class]);
+        }
+
+        // The weekly email runs from the Laravel scheduler that LibreNMS already runs every minute.
+        $settings = PluginSettings::fromArray($pluginManager->getSettings(self::PLUGIN));
+        if ($settings->report->isActive()) {
+            $this->callAfterResolving(Schedule::class, function (Schedule $schedule) use ($settings): void {
+                $schedule->command(SendReport::class)->weeklyOn($settings->report->day, $settings->report->time);
+            });
+        }
     }
 }

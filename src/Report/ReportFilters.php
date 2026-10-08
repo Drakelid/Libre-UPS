@@ -25,12 +25,12 @@ final readonly class ReportFilters
         public ?string $os,
         public ?int $group,
         public ?string $q,
+        public ?string $sensor,
         public string $sort,
         public string $dir,
         public int $limit,
         public string $aggregate,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $input  Raw query parameters.
@@ -55,6 +55,7 @@ final readonly class ReportFilters
 
         $group = InputParser::parseGroup($input['group'] ?? null);
         $q = InputParser::parseSearch($input['q'] ?? null);
+        $sensor = InputParser::parseSearch($input['sensor'] ?? null, 'sensor');
 
         $sort = InputParser::nullableString($input['sort'] ?? null, 'sort') ?? 'value';
         if (! in_array($sort, self::SORTS, true)) {
@@ -83,7 +84,7 @@ final readonly class ReportFilters
             $aggregate = 'none';
         }
 
-        return new self($type, $class, $os, $group, $q, $sort, $dir, $limit, $aggregate);
+        return new self($type, $class, $os, $group, $q, $sensor, $sort, $dir, $limit, $aggregate);
     }
 
     /** @return array<string, string|int> Values suitable for a query string (null becomes an empty string). */
@@ -95,6 +96,7 @@ final readonly class ReportFilters
             'os' => $this->os ?? '',
             'group' => $this->group ?? '',
             'q' => $this->q ?? '',
+            'sensor' => $this->sensor ?? '',
             'sort' => $this->sort,
             'dir' => $this->dir,
             'limit' => $this->limit,
@@ -111,6 +113,7 @@ final readonly class ReportFilters
             'os' => $this->os,
             'group' => $this->group,
             'q' => $this->q,
+            'sensor' => $this->sensor,
             'sort' => $this->sort,
             'dir' => $this->dir,
             'limit' => $this->limit,

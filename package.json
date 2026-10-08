@@ -1,0 +1,13 @@
+{
+    "name": "librenms-ups-battery-frontend-tests",
+    "private": true,
+    "description": "Tests for resources/js/report.js. The plugin itself ships no build step and no node dependencies.",
+    "type": "module",
+    "scripts": {
+        "check": "node --check resources/js/report.js",
+        "test": "node --test tests/js/*.test.mjs"
+    },
+    "devDependencies": {
+        "jsdom": "^26.1.0"
+    }
+}

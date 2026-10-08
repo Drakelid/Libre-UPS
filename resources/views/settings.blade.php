@@ -2,8 +2,12 @@
     // Show what the plugin actually uses, so invalid saved values are corrected the next time the form is saved.
     $current = \Drakelid\UpsBattery\Report\PluginSettings::fromArray($settings);
     $thresholdText = is_string($settings['thresholds'] ?? null) ? $settings['thresholds'] : '';
-    $thresholdErrors = \Drakelid\UpsBattery\Report\Thresholds::parse($thresholdText)->errors();
+    $thresholdErrors = $current->thresholds->errors();
+    $alertHints = \Drakelid\UpsBattery\Report\AlertRuleHint::forThresholds($current->thresholds);
+    $recipientText = is_string($settings['report_recipients'] ?? null) ? $settings['report_recipients'] : '';
+    $number = fn (float $value): string => \Drakelid\UpsBattery\Report\NumberFormat::plain($value);
     $t = fn (string $key) => trans('ups-battery::ups-battery.settings.'.$key, [], $current->language);
+    $days = trans('ups-battery::ups-battery.settings.days', [], $current->language);
 @endphp
 <div class="container-fluid">
     <h3>{{ $t('title') }}</h3>
@@ -76,10 +80,100 @@
                 </select>
             </div>
         </div>
+
+        <h4>{{ $t('suspect_title') }}</h4>
+        <p class="text-muted">{{ $t('suspect_help') }}</p>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-suspect-runtime">{{ $t('suspect_runtime') }}</label>
+            <div class="col-sm-2">
+                <input type="number" class="form-control" id="ub-suspect-runtime" name="settings[suspect_runtime]" value="{{ $number($current->suspectRule->maxRuntime) }}" min="1" max="1000" step="any">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-suspect-load">{{ $t('suspect_max_load') }}</label>
+            <div class="col-sm-2">
+                <input type="number" class="form-control" id="ub-suspect-load" name="settings[suspect_max_load]" value="{{ $number($current->suspectRule->maxLoad) }}" min="0" max="100" step="any">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-suspect-charge">{{ $t('suspect_min_charge') }}</label>
+            <div class="col-sm-2">
+                <input type="number" class="form-control" id="ub-suspect-charge" name="settings[suspect_min_charge]" value="{{ $number($current->suspectRule->minCharge) }}" min="0" max="100" step="any">
+            </div>
+        </div>
+
+        <h4>{{ $t('report_title') }}</h4>
+        <p class="text-muted">{{ $t('report_help') }}</p>
+        <div class="form-group">
+            <div class="col-sm-offset-3 col-sm-5">
+                <div class="checkbox">
+                    <label><input type="checkbox" name="settings[report_enabled]" value="1" @checked($current->report->enabled)> {{ $t('report_enabled') }}</label>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-report-recipients">{{ $t('report_recipients') }}</label>
+            <div class="col-sm-5">
+                <textarea class="form-control" id="ub-report-recipients" name="settings[report_recipients]" rows="3" spellcheck="false">{{ $recipientText }}</textarea>
+                <span class="help-block">{{ $t('report_recipients_help') }}</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-report-day">{{ $t('report_day') }}</label>
+            <div class="col-sm-3">
+                <select class="form-control" id="ub-report-day" name="settings[report_day]">
+                    @foreach ($days as $index => $name)
+                        <option value="{{ $index }}" @selected($current->report->day === $index)>{{ $name }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-report-time">{{ $t('report_time') }}</label>
+            <div class="col-sm-2">
+                <input type="time" class="form-control" id="ub-report-time" name="settings[report_time]" value="{{ $current->report->time }}">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" for="ub-report-top">{{ $t('report_top') }}</label>
+            <div class="col-sm-2">
+                <select class="form-control" id="ub-report-top" name="settings[report_top]">
+                    @foreach (\Drakelid\UpsBattery\Report\ReportSchedule::TOP_CHOICES as $option)
+                        <option value="{{ $option }}" @selected($current->report->top === $option)>{{ $option }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+
         <div class="form-group">
             <div class="col-sm-offset-3 col-sm-5">
                 <button type="submit" class="btn btn-primary">{{ $t('save') }}</button>
             </div>
         </div>
     </form>
+
+    <h4>{{ $t('alert_title') }}</h4>
+    <p class="text-muted">{{ $t('alert_help') }}</p>
+    @if ($alertHints === [])
+        <p>{{ $t('alert_none') }}</p>
+    @else
+        <table class="table table-condensed">
+            <thead>
+                <tr>
+                    <th>{{ $t('alert_name') }}</th>
+                    <th>{{ $t('alert_severity') }}</th>
+                    <th>{{ $t('alert_query') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($alertHints as $hint)
+                    <tr>
+                        <td>{{ $hint['name'] }}</td>
+                        <td>{{ $hint['severity'] }}</td>
+                        <td><code>{{ $hint['rule'] }}</code></td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
 </div>

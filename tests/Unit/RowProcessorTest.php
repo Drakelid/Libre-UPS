@@ -18,7 +18,7 @@ it('sorts the value column ascending', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'c', 'deviceId' => 3, 'value' => 20.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['limit' => '0']), false);
 
     expect(hostnames($result['rows']))->toBe(['b', 'c', 'a']);
 });
@@ -30,7 +30,7 @@ it('sorts the value column descending', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'c', 'deviceId' => 3, 'value' => 20.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['dir' => 'desc', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['dir' => 'desc', 'limit' => '0']), false);
 
     expect(hostnames($result['rows']))->toBe(['a', 'c', 'b']);
 });
@@ -42,7 +42,7 @@ it('puts null values last in both directions', function (string $dir): void {
         makeRow(['sensorId' => 3, 'hostname' => 'high', 'deviceId' => 3, 'value' => 9.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['dir' => $dir, 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['dir' => $dir, 'limit' => '0']), false);
 
     expect(array_last_host($result['rows']))->toBe('nul');
 })->with(['asc', 'desc']);
@@ -59,7 +59,7 @@ it('breaks ties by hostname and then sensor id', function (): void {
         makeRow(['sensorId' => 2, 'hostname' => 'a', 'deviceId' => 1, 'value' => 10.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['limit' => '0']), false);
 
     expect(array_map(fn ($r): int => $r->sensorId, $result['rows']))->toBe([2, 9, 5]);
 });
@@ -71,7 +71,7 @@ it('sorts hostnames naturally and case-insensitively', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'ups-1', 'deviceId' => 3]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['sort' => 'hostname', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['sort' => 'hostname', 'limit' => '0']), false);
 
     expect(hostnames($result['rows']))->toBe(['ups-1', 'UPS-2', 'ups-10']);
 });
@@ -83,7 +83,7 @@ it('puts a missing location last in both directions', function (string $dir): vo
         makeRow(['sensorId' => 3, 'hostname' => 'b', 'deviceId' => 3, 'location' => 'Beta']),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['sort' => 'location', 'dir' => $dir, 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['sort' => 'location', 'dir' => $dir, 'limit' => '0']), false);
 
     expect(array_last_host($result['rows']))->toBe('none');
 })->with(['asc', 'desc']);
@@ -95,7 +95,7 @@ it('sorts by last update time', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'never', 'deviceId' => 3, 'lastUpdate' => null]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['sort' => 'lastupdate', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['sort' => 'lastupdate', 'limit' => '0']), false);
 
     expect(hostnames($result['rows']))->toBe(['old', 'new', 'never']);
 });
@@ -107,7 +107,7 @@ it('sorts state sensors by severity first', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'warn', 'deviceId' => 3, 'value' => 2.0, 'severity' => Severity::Warning]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['class' => 'state', 'limit' => '0']), true);
+    $result = (new RowProcessor)->process($rows, makeFilters(['class' => 'state', 'limit' => '0']), true);
 
     expect(hostnames($result['rows']))->toBe(['crit', 'warn', 'ok']);
 });
@@ -119,7 +119,7 @@ it('aggregates to the lowest value per device', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'b', 'deviceId' => 2, 'value' => 20.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['aggregate' => 'min', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['aggregate' => 'min', 'limit' => '0']), false);
 
     expect($result['total'])->toBe(2)
         ->and(array_map(fn ($r): int => $r->sensorId, $result['rows']))->toBe([2, 3]);
@@ -132,7 +132,7 @@ it('aggregates to the highest value per device', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'b', 'deviceId' => 2, 'value' => 20.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['aggregate' => 'max', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['aggregate' => 'max', 'limit' => '0']), false);
 
     expect(array_map(fn ($r): int => $r->sensorId, $result['rows']))->toBe([3, 1]);
 });
@@ -143,7 +143,7 @@ it('prefers a real value over null when aggregating', function (): void {
         makeRow(['sensorId' => 2, 'hostname' => 'a', 'deviceId' => 1, 'value' => 10.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['aggregate' => 'max', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['aggregate' => 'max', 'limit' => '0']), false);
 
     expect($result['rows'])->toHaveCount(1)
         ->and($result['rows'][0]->sensorId)->toBe(2);
@@ -155,7 +155,7 @@ it('picks the lowest sensor id when aggregated values tie', function (): void {
         makeRow(['sensorId' => 3, 'hostname' => 'a', 'deviceId' => 1, 'value' => 10.0]),
     ];
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['aggregate' => 'min', 'limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['aggregate' => 'min', 'limit' => '0']), false);
 
     expect($result['rows'][0]->sensorId)->toBe(3);
 });
@@ -166,7 +166,7 @@ it('limits to top N but keeps the full total and summary rows', function (): voi
         $rows[] = makeRow(['sensorId' => $i, 'deviceId' => $i, 'hostname' => "ups-$i", 'value' => (float) $i]);
     }
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['limit' => '10']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['limit' => '10']), false);
 
     expect($result['rows'])->toHaveCount(10)
         ->and($result['total'])->toBe(30)
@@ -180,13 +180,13 @@ it('returns every row when the limit is zero', function (): void {
         $rows[] = makeRow(['sensorId' => $i, 'deviceId' => $i, 'hostname' => "ups-$i", 'value' => (float) $i]);
     }
 
-    $result = (new RowProcessor())->process($rows, makeFilters(['limit' => '0']), false);
+    $result = (new RowProcessor)->process($rows, makeFilters(['limit' => '0']), false);
 
     expect($result['rows'])->toHaveCount(30);
 });
 
 it('handles an empty list', function (): void {
-    $result = (new RowProcessor())->process([], makeFilters(), false);
+    $result = (new RowProcessor)->process([], makeFilters(), false);
 
     expect($result)->toBe(['rows' => [], 'total' => 0, 'summaryRows' => []]);
 });

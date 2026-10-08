@@ -6,6 +6,11 @@ namespace Drakelid\UpsBattery\Report;
 
 final readonly class ReportRow
 {
+    /**
+     * @param  bool  $hydrated  False for rows from the light query: formatted value, unit and links are still
+     *                          missing and are filled in (withDisplay) for the rows that are actually shown.
+     *                          This is an explicit flag because a formatted value can legitimately be empty.
+     */
     public function __construct(
         public int $deviceId,
         public string $hostname,
@@ -27,11 +32,13 @@ final readonly class ReportRow
         public ?string $lastUpdate,
         public string $sensorUrl = '',
         public string $graphUrl = '',
-    ) {
-    }
+        public string $trendUrl = '',
+        public string $sensorClass = '',
+        public bool $hydrated = true,
+    ) {}
 
     /** Copy with the presentation fields that are only needed for the rows that are actually shown. */
-    public function withDisplay(string $valueFormatted, string $unit, string $deviceUrl, string $sensorUrl, string $graphUrl): self
+    public function withDisplay(string $valueFormatted, string $unit, string $deviceUrl, string $sensorUrl, string $graphUrl, string $trendUrl): self
     {
         return new self(
             $this->deviceId,
@@ -54,6 +61,9 @@ final readonly class ReportRow
             $this->lastUpdate,
             $sensorUrl,
             $graphUrl,
+            $trendUrl,
+            $this->sensorClass,
+            true,
         );
     }
 
@@ -72,6 +82,7 @@ final readonly class ReportRow
             'sensor_descr' => $this->sensorDescr,
             'sensor_url' => $this->sensorUrl,
             'graph_url' => $this->graphUrl,
+            'trend_url' => $this->trendUrl,
             'value' => $this->value,
             'value_formatted' => $this->valueFormatted,
             'unit' => $this->unit,
