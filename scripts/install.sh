@@ -317,7 +317,7 @@ else
                 PLUGIN_ARG="$RESOLVED"
                 VERSION_NOTE="$RESOLVED (no tagged release on Packagist yet)"
                 warn "no tagged release on Packagist yet, using $RESOLVED (it follows the main branch)"
-                info "Tip: tag a release on GitHub (for example v1.1.0) to get stable, pinned installs."
+                info "Tip: tag a release on GitHub (for example v1.0.0) to get stable, pinned installs."
                 if ! command -v git >/dev/null 2>&1 && ! command -v unzip >/dev/null 2>&1; then
                     warn "neither git nor unzip is installed; composer may be unable to download $RESOLVED"
                 fi
