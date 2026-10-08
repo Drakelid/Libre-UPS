@@ -3,6 +3,7 @@
 return [
     'title' => 'UPS-batteri',
     'view' => [
+        'label' => 'Visning',
         'ups' => 'UPS-oversikt',
         'single' => 'Én måleverdi',
         'matrix' => 'Sammenlign måleverdier',

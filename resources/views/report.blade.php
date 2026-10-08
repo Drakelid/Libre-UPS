@@ -83,6 +83,29 @@
     #ups-battery .ub-tl-bar { width: 70%; min-height: 1px; background: #337ab7; border-radius: 2px 2px 0 0; }
     #ups-battery .ub-tl-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .8; }
     #ups-battery td .label { display: inline-block; margin-bottom: 2px; }
+    #ups-battery .ub-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+    #ups-battery .ub-heading .panel-title { margin-right: auto; }
+    #ups-battery .ub-switch input[type="radio"] { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+    #ups-battery .ub-switch .btn.active { font-weight: bold; }
+    #ups-battery .ub-switch .btn:focus-within { outline: 2px solid #337ab7; outline-offset: -2px; }
+    #ups-battery .ub-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    #ups-battery .ub-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+    #ups-battery .ub-filters .form-group { margin: 0; }
+    #ups-battery .ub-filters label { margin-right: 4px; font-weight: normal; opacity: .85; }
+    #ups-battery .ub-views { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(127, 127, 127, .2); }
+    #ups-battery .ub-overview { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; margin-bottom: 12px; }
+    #ups-battery .ub-overview .ub-cards { flex: 3 1 520px; margin-bottom: 0; align-content: flex-start; }
+    #ups-battery .ub-overview .ub-timeline-box { flex: 2 1 320px; max-width: none; margin-bottom: 0; }
+    #ups-battery .ub-card { display: flex; flex-direction: column; justify-content: center; min-height: 74px; }
+    #ups-battery .ub-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    #ups-battery .ub-card-icon { opacity: .45; font-size: 1.3em; }
+    #ups-battery .ub-host small { display: block; opacity: .7; }
+    #ups-battery .ub-sub { font-size: .85em; opacity: .8; margin-top: 2px; white-space: nowrap; }
+    #ups-battery .ub-dash { opacity: .4; }
+    #ups-battery .ub-focus { margin-left: 8px; }
+    #ups-battery .ub-focus .label { font-size: 90%; }
+    #ups-battery .ub-focus button { padding: 0 4px; vertical-align: baseline; }
+    #ups-battery #ub-table > thead > tr > th { white-space: nowrap; }
 </style>
 @endpush
 
@@ -94,15 +117,34 @@
 
     <div class="ub-controls">
         <div class="panel panel-default">
-            <div class="panel-heading">
+            <div class="panel-heading ub-heading">
                 <h3 class="panel-title"><i class="fa fa-battery-half fa-fw" aria-hidden="true"></i> {{ $t('title') }}</h3>
+                <div class="btn-group btn-group-sm ub-switch" role="radiogroup" aria-label="{{ $t('view.label') }}">
+                    <label class="btn btn-default"><input type="radio" name="ub-view" id="ub-view-ups" value="ups"> <i class="fa fa-th-list fa-fw" aria-hidden="true"></i> {{ $t('view.ups') }}</label>
+                    <label class="btn btn-default"><input type="radio" name="ub-view" id="ub-view-single" value="single"> <i class="fa fa-sort-amount-asc fa-fw" aria-hidden="true"></i> {{ $t('view.single') }}</label>
+                    <label class="btn btn-default"><input type="radio" name="ub-view" id="ub-view-matrix" value="matrix"> <i class="fa fa-table fa-fw" aria-hidden="true"></i> {{ $t('view.matrix') }}</label>
+                </div>
+                <div class="ub-actions">
+                    <a id="ub-csv" class="btn btn-default btn-sm" href="#" title="{{ $t('filters.export') }}">
+                        <i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ $t('filters.export') }}
+                    </a>
+                    <a id="ub-csv-all" class="btn btn-default btn-sm" href="#">
+                        <i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ $t('filters.export_all') }}
+                    </a>
+                    <button type="button" id="ub-kiosk" class="btn btn-default btn-sm">
+                        <i class="fa fa-expand fa-fw" aria-hidden="true"></i> {{ $t('filters.kiosk') }}
+                    </button>
+                </div>
             </div>
             <div class="panel-body">
-                <form class="form-inline" id="ub-filters" onsubmit="return false;">
+                <form class="form-inline ub-filters" id="ub-filters" onsubmit="return false;">
                     <div class="form-group">
-                        <label class="radio-inline"><input type="radio" name="ub-view" id="ub-view-ups" value="ups"> {{ $t('view.ups') }}</label>
-                        <label class="radio-inline"><input type="radio" name="ub-view" id="ub-view-single" value="single"> {{ $t('view.single') }}</label>
-                        <label class="radio-inline"><input type="radio" name="ub-view" id="ub-view-matrix" value="matrix"> {{ $t('view.matrix') }}</label>
+                        <label for="ub-q" class="sr-only">{{ $t('filters.search') }}</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-addon"><i class="fa fa-search" aria-hidden="true"></i></span>
+                            <input type="search" id="ub-q" class="form-control" maxlength="100"
+                                   placeholder="{{ $t('filters.search_placeholder') }}">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="ub-type">{{ $t('filters.type') }}</label>
@@ -132,11 +174,6 @@
                         <label for="ub-limit">{{ $t('filters.limit') }}</label>
                         <select id="ub-limit" class="form-control input-sm"></select>
                     </div>
-                    <div class="form-group">
-                        <label for="ub-q" class="sr-only">{{ $t('filters.search') }}</label>
-                        <input type="search" id="ub-q" class="form-control input-sm" maxlength="100"
-                               placeholder="{{ $t('filters.search_placeholder') }}">
-                    </div>
                     <div class="form-group" id="ub-sensor-group">
                         <label for="ub-sensor" class="sr-only">{{ $t('filters.sensor') }}</label>
                         <input type="search" id="ub-sensor" class="form-control input-sm" maxlength="100"
@@ -153,17 +190,8 @@
                     <div class="form-group" id="ub-refresh-group">
                         <label class="checkbox-inline"><input type="checkbox" id="ub-refresh"> {{ $t('filters.refresh') }}</label>
                     </div>
-                    <a id="ub-csv" class="btn btn-default btn-sm" href="#">
-                        <i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ $t('filters.export') }}
-                    </a>
-                    <a id="ub-csv-all" class="btn btn-default btn-sm" href="#">
-                        <i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ $t('filters.export_all') }}
-                    </a>
-                    <button type="button" id="ub-kiosk" class="btn btn-default btn-sm">
-                        <i class="fa fa-expand fa-fw" aria-hidden="true"></i> {{ $t('filters.kiosk') }}
-                    </button>
                 </form>
-                <form class="form-inline" id="ub-views-form" style="margin-top: 10px;" onsubmit="return false;">
+                <form class="form-inline ub-views" id="ub-views-form" onsubmit="return false;">
                     <div class="form-group">
                         <label for="ub-views" class="sr-only">{{ $t('views.choose') }}</label>
                         <select id="ub-views" class="form-control input-sm"></select>
@@ -178,14 +206,15 @@
             </div>
         </div>
     </div>
-
     <div id="ub-error" class="alert alert-danger" style="display: none;" role="alert"></div>
     <p id="ub-hint" class="text-muted" style="display: none;">{{ $t('view.matrix_hint') }}</p>
-    <div id="ub-cards" class="ub-cards" style="display: none;"></div>
-    <div id="ub-timeline-box" class="ub-timeline-box" style="display: none;">
-        <div class="ub-timeline-title">{{ $t('ups.timeline_title') }}</div>
-        <div id="ub-timeline" class="ub-timeline"></div>
-        <p id="ub-timeline-empty" class="text-muted small" style="display: none;">{{ $t('ups.timeline_empty') }}</p>
+    <div class="ub-overview">
+        <div id="ub-cards" class="ub-cards" style="display: none;"></div>
+        <div id="ub-timeline-box" class="ub-timeline-box" style="display: none;">
+            <div class="ub-timeline-title"><i class="fa fa-calendar fa-fw" aria-hidden="true"></i> {{ $t('ups.timeline_title') }}</div>
+            <div id="ub-timeline" class="ub-timeline"></div>
+            <p id="ub-timeline-empty" class="text-muted small" style="display: none;">{{ $t('ups.timeline_empty') }}</p>
+        </div>
     </div>
     <p id="ub-summary" class="text-muted" aria-live="polite"></p>
 

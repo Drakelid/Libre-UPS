@@ -284,6 +284,9 @@
         el('ub-view-ups').checked = ups;
         el('ub-view-single').checked = state.view === 'single';
         el('ub-view-matrix').checked = matrix;
+        ['ub-view-ups', 'ub-view-single', 'ub-view-matrix'].forEach((id) => {
+            el(id).parentNode.classList.toggle('active', el(id).checked);
+        });
         el('ub-class-group').style.display = state.view === 'single' ? '' : 'none';
         el('ub-aggregate-group').style.display = state.view === 'single' ? '' : 'none';
         el('ub-sensor-group').style.display = ups ? 'none' : '';
@@ -782,11 +785,13 @@
         return td;
     }
 
-    function installedCell(r, canEdit) {
-        const td = document.createElement('td');
+    /** The swap date, with the install date (and the pencil to change it) on a small line below. */
+    function swapAndInstalledCell(r, canEdit) {
+        const td = swapCell(r.swap);
         const installed = r.swap.source === 'manual' || r.swap.source === 'ups_last' ? r.swap.installed : null;
-        td.appendChild(document.createTextNode(installed || '–'));
-        if (!installed) { td.className = 'text-muted'; }
+        const line = document.createElement('div');
+        line.className = 'ub-sub';
+        line.appendChild(document.createTextNode(T.ups.col_installed + ': ' + (installed || '–')));
         if (canEdit) {
             const button = document.createElement('button');
             button.type = 'button';
@@ -798,8 +803,9 @@
             icon.setAttribute('aria-hidden', 'true');
             button.appendChild(icon);
             button.addEventListener('click', () => editInstalled(r));
-            td.appendChild(button);
+            line.appendChild(button);
         }
+        td.appendChild(line);
         return td;
     }
 
@@ -941,16 +947,25 @@
      * A summary card. With `focus` it is a button: a click shows only the UPSs it counts, a second click
      * (or the "UPSs" card, focus '') shows all again.
      */
-    function card(value, label, tone, node, focus) {
+    function card(value, label, tone, node, focus, icon) {
         const box = document.createElement('div');
         box.className = 'ub-card' + (tone ? ' ub-' + tone : '');
+        const head = document.createElement('div');
+        head.className = 'ub-card-head';
         const number = document.createElement('div');
         number.className = 'ub-card-value';
         if (node) { number.appendChild(node); } else { number.textContent = String(value); }
+        head.appendChild(number);
+        if (icon) {
+            const i = document.createElement('i');
+            i.className = 'fa fa-' + icon + ' ub-card-icon';
+            i.setAttribute('aria-hidden', 'true');
+            head.appendChild(i);
+        }
         const text = document.createElement('div');
         text.className = 'ub-card-label';
         text.textContent = label;
-        box.appendChild(number);
+        box.appendChild(head);
         box.appendChild(text);
 
         if (focus !== undefined) {
@@ -976,18 +991,54 @@
         const c = body.cards;
         const box = el('ub-cards');
         box.textContent = '';
-        box.appendChild(card(c.devices, T.ups.card_devices, '', null, ''));
-        box.appendChild(card(c.on_battery, T.ups.card_on_battery, c.on_battery > 0 ? 'danger' : '', null, 'on_battery'));
-        box.appendChild(card(c.swap_overdue, T.ups.card_overdue, c.swap_overdue > 0 ? 'danger' : '', null, 'overdue'));
-        box.appendChild(card(c.swap_due, T.ups.card_due.replace(':days', body.warn_days), c.swap_due > 0 ? 'warn' : '', null, 'due'));
-        box.appendChild(card(c.battery_alarm, T.ups.card_alarm, c.battery_alarm > 0 ? 'warn' : '', null, 'alarm'));
-        box.appendChild(card(c.down || 0, T.ups.card_down, c.down > 0 ? 'warn' : '', null, 'down'));
-        box.appendChild(card(c.swap_unknown, T.ups.card_unknown, '', null, 'unknown'));
+        box.appendChild(card(c.devices, T.ups.card_devices, '', null, '', 'server'));
+        box.appendChild(card(c.on_battery, T.ups.card_on_battery, c.on_battery > 0 ? 'danger' : '', null, 'on_battery', 'bolt'));
+        box.appendChild(card(c.swap_overdue, T.ups.card_overdue, c.swap_overdue > 0 ? 'danger' : '', null, 'overdue', 'exclamation-circle'));
+        box.appendChild(card(c.swap_due, focusLabel('due', body), c.swap_due > 0 ? 'warn' : '', null, 'due', 'calendar'));
+        box.appendChild(card(c.battery_alarm, T.ups.card_alarm, c.battery_alarm > 0 ? 'warn' : '', null, 'alarm', 'heartbeat'));
+        box.appendChild(card(c.down || 0, T.ups.card_down, c.down > 0 ? 'warn' : '', null, 'down', 'chain-broken'));
+        box.appendChild(card(c.swap_unknown, T.ups.card_unknown, '', null, 'unknown', 'question-circle'));
         if (c.lowest_runtime) {
-            const lowest = card(null, T.ups.card_lowest + ': ' + c.lowest_runtime.display_name, '', link(c.lowest_runtime.value_formatted, c.lowest_runtime.device_url, c.lowest_runtime.display_name));
+            const lowest = card(null, T.ups.card_lowest + ': ' + c.lowest_runtime.display_name, '', link(c.lowest_runtime.value_formatted, c.lowest_runtime.device_url, c.lowest_runtime.display_name), undefined, 'clock-o');
             box.appendChild(lowest);
         }
         renderTimeline(c.swap_timeline || []);
+    }
+
+    /** Label of the summary card for a card filter. */
+    function focusLabel(focus, body) {
+        const labels = {
+            on_battery: T.ups.card_on_battery,
+            overdue: T.ups.card_overdue,
+            due: T.ups.card_due.replace(':days', body.warn_days),
+            alarm: T.ups.card_alarm,
+            down: T.ups.card_down,
+            unknown: T.ups.card_unknown
+        };
+        return labels[focus] || focus;
+    }
+
+    /** "Showing x of y", plus the active card filter with a button to clear it. */
+    function renderUpsSummary(body) {
+        const summary = el('ub-summary');
+        summary.textContent = T.summary.showing.replace(':shown', body.rows.length).replace(':total', body.total);
+        if (!state.focus) { return; }
+
+        const chip = document.createElement('span');
+        chip.className = 'ub-focus';
+        const label = document.createElement('span');
+        label.className = 'label label-primary';
+        label.textContent = focusLabel(state.focus, body);
+        const clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'btn btn-link btn-xs ub-focus-clear';
+        clear.title = T.ups.card_clear;
+        clear.setAttribute('aria-label', T.ups.card_clear);
+        clear.textContent = '×';
+        clear.addEventListener('click', () => { state.focus = ''; loadData().catch(handleFailure); });
+        chip.appendChild(label);
+        chip.appendChild(clear);
+        summary.appendChild(chip);
     }
 
     /** Short month name in the browser's language, with the year for January and the first month. */
@@ -1033,7 +1084,6 @@
         const columns = [
             { sort: null, label: '' },
             { sort: 'hostname', label: T.columns.hostname },
-            { sort: 'location', label: T.columns.location },
             { sort: 'status', label: T.ups.col_status },
             { sort: null, label: T.ups.col_attention },
             { sort: 'runtime', label: T.ups.col_runtime },
@@ -1042,7 +1092,6 @@
             { sort: 'temperature', label: T.ups.col_temperature },
             { sort: null, label: T.ups.col_battery },
             { sort: null, label: T.ups.col_self_test },
-            { sort: null, label: T.ups.col_installed },
             { sort: 'swap', label: T.ups.col_swap }
         ];
         buildHead(columns);
@@ -1075,10 +1124,16 @@
             }));
             tr.appendChild(toggle);
 
+            // Hostname with the location below it, to keep the table narrow.
             const host = document.createElement('td');
+            host.className = 'ub-host';
             host.appendChild(link(r.display_name, r.device_url, r.hostname));
+            if (r.location) {
+                const location = document.createElement('small');
+                location.textContent = r.location;
+                host.appendChild(location);
+            }
             tr.appendChild(host);
-            tr.appendChild(cell(r.location || ''));
             tr.appendChild(statusCell(r));
             tr.appendChild(attentionCell(r));
             tr.appendChild(sensorCell(r.runtime, r.display_name));
@@ -1087,13 +1142,12 @@
             tr.appendChild(sensorCell(r.temperature, r.display_name));
             tr.appendChild(batteryStatusCell(r));
             tr.appendChild(sensorCell(r.self_test, r.display_name));
-            tr.appendChild(installedCell(r, body.can_edit === true));
-            tr.appendChild(swapCell(r.swap));
+            tr.appendChild(swapAndInstalledCell(r, body.can_edit === true));
 
             tbody.appendChild(tr);
         });
 
-        el('ub-summary').textContent = T.summary.showing.replace(':shown', body.rows.length).replace(':total', body.total);
+        renderUpsSummary(body);
     }
 
     // ---- hover graph ----

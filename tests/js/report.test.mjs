@@ -493,16 +493,18 @@ test('UPS overview: one row per UPS with power, battery and swap data', async ()
     assert.ok(first.classList.contains('ub-sev-critical'), 'a severity stripe, not a red row');
     assert.ok(!first.classList.contains('danger'));
     assert.ok(second.classList.contains('ub-sev-ok'));
-    assert.equal(cells(first)[1].textContent, 'UPS A');
-    assert.equal(cells(first)[3].querySelector('.label-danger').textContent, 'ups.on_battery');
-    assert.ok(cells(first)[5].classList.contains('danger'), 'runtime cell is red');
-    assert.ok(cells(first)[9].textContent.includes('ups.bad_packs'));
-    assert.ok(cells(first)[9].textContent.includes('suspect.yes'));
-    assert.ok(cells(first)[11].textContent.startsWith('2020-01-01'));
-    assert.ok(cells(first)[12].textContent.startsWith('2024-01-01'));
-    assert.ok(cells(first)[12].classList.contains('danger'));
-    assert.equal(cells(second)[3].querySelector('.label-success').textContent, 'ups.on_mains');
-    assert.equal(cells(second)[12].textContent, '–');
+    assert.equal(cells(first)[1].querySelector('a').textContent, 'UPS A');
+    assert.equal(cells(first)[1].querySelector('small').textContent, 'Site A', 'the location sits under the hostname');
+    assert.equal(cells(first)[2].querySelector('.label-danger').textContent, 'ups.on_battery');
+    assert.ok(cells(first)[4].classList.contains('danger'), 'runtime cell is red');
+    assert.ok(cells(first)[8].textContent.includes('ups.bad_packs'));
+    assert.ok(cells(first)[8].textContent.includes('suspect.yes'));
+    assert.ok(cells(first)[10].textContent.startsWith('2024-01-01'));
+    assert.ok(cells(first)[10].classList.contains('danger'));
+    assert.equal(cells(first)[10].querySelector('.ub-sub').textContent, 'ups.col_installed: 2020-01-01', 'the install date sits under the swap date');
+    assert.equal(cells(first).length, 11);
+    assert.equal(cells(second)[2].querySelector('.label-success').textContent, 'ups.on_mains');
+    assert.ok(cells(second)[10].textContent.startsWith('–'));
 });
 
 test('UPS overview: a row opens to show all sensors in one card per class, problems on top', async () => {
@@ -685,29 +687,75 @@ test('UPS overview: an empty timeline says so instead of showing empty bars', as
 test('UPS overview: the attention column says why a UPS needs a look', async () => {
     const page = await boot({ defaultView: 'ups' });
     const [first, second] = page.rows();
-    const attention = first.children[4];
+    const attention = first.children[3];
     const badges = [...attention.querySelectorAll('.label')];
 
-    assert.equal(page.document.querySelectorAll('#ub-head th')[4].textContent, 'ups.col_attention');
+    assert.equal(page.document.querySelectorAll('#ub-head th')[3].textContent, 'ups.col_attention');
     assert.equal(badges.length, 3);
     assert.ok(badges[0].classList.contains('label-danger'));
     assert.equal(badges[0].textContent, 'on_battery');
     assert.ok(attention.textContent.includes('issues.more'), 'the rest is summarised');
     assert.equal(attention.title.split('\n').length, 5, 'the tooltip lists every issue');
-    assert.equal(second.children[4].textContent, '–');
+    assert.equal(second.children[3].textContent, '–');
 });
 
 test('UPS overview: charge, load and battery life get a bar', async () => {
     const page = await boot({ defaultView: 'ups' });
     const first = page.rows()[0];
-    const charge = first.children[6].querySelector('.ub-bar > span');
-    const life = first.children[12].querySelector('.ub-bar');
+    const charge = first.children[5].querySelector('.ub-bar > span');
+    const life = first.children[10].querySelector('.ub-bar');
 
     assert.ok(charge, 'charge bar');
-    assert.ok(first.children[7].querySelector('.ub-bar'), 'load bar');
-    assert.equal(first.children[5].querySelector('.ub-bar'), null, 'no bar for runtime');
+    assert.ok(first.children[6].querySelector('.ub-bar'), 'load bar');
+    assert.equal(first.children[4].querySelector('.ub-bar'), null, 'no bar for runtime');
     assert.ok(life.classList.contains('ub-bar-critical'));
     assert.equal(life.firstChild.style.width, '100%', 'capped at 100 %');
     assert.equal(life.title, 'ups.life_used');
-    assert.equal(page.rows()[1].children[12].querySelector('.ub-bar'), null);
+    assert.equal(page.rows()[1].children[10].querySelector('.ub-bar'), null);
+});
+
+// ---- refined layout ----
+
+test('the view switch is a button group that shows the active view', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const active = () => [...page.document.querySelectorAll('.ub-switch .btn.active input')].map((i) => i.id);
+
+    assert.deepEqual(active(), ['ub-view-ups']);
+    page.$('ub-view-matrix').checked = true;
+    fire(page.window, page.$('ub-view-matrix'), 'change');
+    await wait();
+    assert.deepEqual(active(), ['ub-view-matrix']);
+});
+
+test('export and kiosk buttons sit in the panel heading, away from the filters', async () => {
+    const page = await boot();
+
+    for (const id of ['ub-csv', 'ub-csv-all', 'ub-kiosk']) {
+        assert.ok(page.$(id).closest('.panel-heading'), id);
+        assert.equal(page.$(id).closest('#ub-filters'), null, id);
+    }
+});
+
+test('UPS overview: the active card filter is named in the summary and can be cleared there', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    assert.equal(page.$('ub-summary').querySelector('.ub-focus'), null);
+
+    page.document.querySelector('#ub-cards [data-focus="alarm"]').click();
+    await wait();
+    const chip = page.$('ub-summary').querySelector('.ub-focus');
+    assert.equal(chip.querySelector('.label').textContent, 'ups.card_alarm');
+
+    chip.querySelector('.ub-focus-clear').click();
+    await wait();
+    assert.equal(page.last('/plugin/ups-battery/ups').params.get('focus'), null);
+    assert.equal(page.$('ub-summary').querySelector('.ub-focus'), null);
+});
+
+test('UPS overview: the summary cards have icons and keep their numbers readable', async () => {
+    const page = await boot({ defaultView: 'ups' });
+    const cards = [...page.document.querySelectorAll('#ub-cards .ub-card')];
+
+    assert.ok(cards.every((c) => c.querySelector('.ub-card-icon')), 'every card has an icon');
+    assert.equal(cards[1].querySelector('.ub-card-value').textContent, '1');
+    assert.ok(cards[1].querySelector('.fa-bolt'));
 });

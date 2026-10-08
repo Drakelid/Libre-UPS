@@ -3,6 +3,7 @@
 return [
     'title' => 'UPS Battery',
     'view' => [
+        'label' => 'View',
         'ups' => 'UPS overview',
         'single' => 'Single metric',
         'matrix' => 'Compare metrics',

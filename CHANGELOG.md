@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-10-08
+
+### Changed
+
+- The view switch (UPS overview, single metric, compare metrics) is a button group in the panel heading, next to the export and kiosk buttons; the filter row only holds filters, starting with the search box.
+- The UPS overview table is two columns narrower: the location is shown under the hostname and the install date (with the pencil to change it) under the next battery swap.
+- Summary cards have icons and sit next to the battery swap timeline on wide screens.
+- When a summary card filters the table, the summary line names the filter and has a button to clear it.
+
 ## [1.3.1] - 2026-10-08
 
 ### Changed
