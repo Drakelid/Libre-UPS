@@ -162,7 +162,48 @@
     #ups-battery.ub-kiosk .ub-exit-kiosk { display: block; position: fixed; top: 60px; right: 16px; z-index: 1500; }
     #ups-battery.ub-kiosk #ub-table { font-size: 1.5em; }
     #ups-battery.ub-kiosk #ub-summary { font-size: 1.3em; }
-    #ups-battery.ub-kiosk .ub-card-value { font-size: 2.6em; }</style>
+    #ups-battery.ub-kiosk .ub-card-value { font-size: 2.6em; }
+
+    /* Let flex children shrink below their content's intrinsic width. */
+    #ups-battery .ub-cards, #ups-battery .ub-timeline-box,
+    #ups-battery .ub-filters .form-group, #ups-battery .ub-heading > * { min-width: 0; max-width: 100%; }
+    #ups-battery .ub-detail-grid { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
+
+    @media (max-width: 1199px) {
+        #ups-battery .table-responsive { overflow: visible; border: 0; }
+        #ups-battery #ub-table, #ups-battery #ub-table > thead,
+        #ups-battery #ub-table > tbody { display: block; width: 100%; }
+        /* Keep the real sortable headings available above the stacked records. */
+        #ups-battery #ub-head { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+        #ups-battery #ub-head > th { display: block; border: 0; white-space: normal; }
+        #ups-battery #ub-head > th:empty { display: none; }
+        #ups-battery #ub-body > tr { display: block; margin-bottom: 12px; border: 1px solid var(--ub-line); border-radius: var(--ub-radius); }
+        #ups-battery #ub-body > tr > td {
+            display: block; width: auto; max-width: none; text-align: left;
+            white-space: normal; overflow-wrap: anywhere; padding: 8px 10px;
+        }
+        #ups-battery #ub-body > tr > td[data-label]:not([data-label=""])::before {
+            content: attr(data-label); display: block; font-size: .78em; font-weight: 600;
+            text-transform: uppercase; opacity: .7; margin-bottom: 3px;
+        }
+        #ups-battery #ub-table .ub-num .ub-bar { margin-left: 0; }
+        #ups-battery .ub-sub, #ups-battery td .label,
+        #ups-battery .ub-item-value, #ups-battery .ub-item-group { white-space: normal; overflow-wrap: anywhere; }
+        #ups-battery .ub-item { flex-wrap: wrap; }
+        #ups-battery .ub-host-wrap { min-width: 0; }
+    }
+    @media (max-width: 767px) {
+        #ups-battery .ub-switch { display: flex; flex-wrap: wrap; }
+        #ups-battery .ub-switch .btn, #ups-battery .ub-actions .btn,
+        #ups-battery .ub-views .btn { white-space: normal; }
+        #ups-battery .ub-filters .form-group { flex: 1 1 100%; }
+        #ups-battery .ub-filters .form-control, #ups-battery .ub-filters .input-group,
+        #ups-battery .ub-views .form-control { width: 100%; max-width: 100%; }
+        #ups-battery .ub-views { display: flex; flex-wrap: wrap; gap: 6px; }
+        #ups-battery .ub-views .form-group { width: 100%; min-width: 0; }
+        #ups-battery .ub-card { max-width: none; min-width: 0; }
+    }
+</style>
 @endpush
 
 @section('content')

@@ -358,6 +358,13 @@
             last = body;
             showError(null);
             if (ups) { renderUps(body); } else if (matrix) { renderMatrix(body); } else { renderSingle(body); }
+            // Use the current translated headers, including dynamically selected matrix metrics.
+            const headers = Array.from(el('ub-head').children);
+            Array.from(el('ub-body').children).forEach((row) => {
+                Array.from(row.children).forEach((td, index) => {
+                    if (td.colSpan === 1) { td.dataset.label = headers[index].textContent.trim(); }
+                });
+            });
             updateHeaders();
             el('ub-table').style.opacity = '';
         });
