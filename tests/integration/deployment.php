@@ -6,14 +6,29 @@ declare(strict_types=1);
 // LIBRENMS_DIR=/opt/librenms php tests/integration/deployment.php
 use Drakelid\UpsBattery\Http\Middleware\EnsurePluginEnabled;
 use Drakelid\UpsBattery\UpsBatteryProvider;
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Config\Repository;
+use Illuminate\Console\OutputStyle;
+use Illuminate\Console\Scheduling\CacheEventMutex;
+use Illuminate\Console\Scheduling\CacheSchedulingMutex;
+use Illuminate\Console\Scheduling\EventMutex;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Console\Scheduling\ScheduleRunCommand;
+use Illuminate\Console\Scheduling\SchedulingMutex;
+use Illuminate\Console\View\Components\Factory as ConsoleComponents;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Http\Request;
 use Illuminate\Pipeline\Pipeline;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Facade;
 use LibreNMS\Interfaces\Plugins\PluginManagerInterface;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
@@ -80,9 +95,15 @@ function deploymentApp(DeploymentPluginManager $plugins, ?array $compiled = null
         {
             return $this->cached;
         }
+
+        public function isDownForMaintenance(): bool
+        {
+            return false;
+        }
     };
     $app->cached = $compiled !== null;
     $app->instance('config', new Repository(['app' => ['env' => 'testing', 'timezone' => 'UTC']]));
+    $app->instance('env', 'testing');
     $app->instance('events', new Dispatcher($app));
     $app->instance('router', new Router($app['events'], $app));
     $app->instance(PluginManagerInterface::class, $plugins);
@@ -105,6 +126,38 @@ function deploymentCheck(bool $condition, string $message): void
     if (! $condition) {
         throw new RuntimeException($message);
     }
+}
+
+function scheduledDeliveries(CacheFactory $cache, bool $enabled, array $settings): int
+{
+    $app = deploymentApp(new DeploymentPluginManager($enabled, $settings));
+    $app->instance(EventMutex::class, new CacheEventMutex($cache));
+    $app->instance(SchedulingMutex::class, new CacheSchedulingMutex($cache));
+    $schedule = $app->make(Schedule::class);
+    $command = new class extends ScheduleRunCommand
+    {
+        public int $deliveries = 0;
+
+        public function prepare(Application $app): void
+        {
+            $this->setLaravel($app);
+            $input = new ArrayInput([], $this->getDefinition());
+            $this->setInput($input);
+            $this->setOutput(new OutputStyle($input, new NullOutput));
+            $this->components = new ConsoleComponents($this->output);
+        }
+
+        protected function runEvent($event): void
+        {
+            // Replace only the final subprocess/mail boundary; Laravel decides which server may run it.
+            deploymentCheck(str_contains($event->command, 'ups-battery:report'), 'Unexpected scheduled command.');
+            $this->deliveries++;
+        }
+    };
+    $command->prepare($app);
+    $command->handle($schedule, $app['events'], $cache->store(), new Handler($app));
+
+    return $command->deliveries;
 }
 
 try {
@@ -142,6 +195,37 @@ try {
         }
     }
     echo "PASS: $checks enabled/disabled route checks, including compiled route caches.\n";
+
+    // Independent scheduler instances use Laravel's real mutex and the same shared cache store.
+    $cache = new class implements CacheFactory
+    {
+        private CacheRepository $repository;
+
+        public function __construct()
+        {
+            $this->repository = new CacheRepository(new ArrayStore);
+        }
+
+        public function store($name = null): CacheRepository
+        {
+            return $this->repository;
+        }
+    };
+    $settings = ['report_enabled' => '1', 'report_recipients' => 'noc@example.com'];
+    Carbon::setTestNow(Carbon::parse('2026-10-19 07:00:00', 'UTC'));
+    try {
+        $first = scheduledDeliveries($cache, true, $settings);
+        $second = scheduledDeliveries($cache, true, $settings);
+        deploymentCheck($first === 1 && $second === 0, "Two schedulers delivered $first + $second reports; expected 1 + 0.");
+        deploymentCheck(scheduledDeliveries($cache, false, $settings) === 0, 'A disabled plugin scheduled mail.');
+        deploymentCheck(scheduledDeliveries($cache, true, ['report_enabled' => '0'] + $settings) === 0, 'A disabled report scheduled mail.');
+        deploymentCheck(scheduledDeliveries($cache, true, ['report_recipients' => ''] + $settings) === 0, 'A report without recipients scheduled mail.');
+        Carbon::setTestNow(Carbon::parse('2026-10-26 07:00:00', 'UTC'));
+        deploymentCheck(scheduledDeliveries($cache, true, $settings) === 1, 'The next weekly report was suppressed.');
+    } finally {
+        Carbon::setTestNow();
+    }
+    echo "PASS: shared scheduler mutex permits one delivery and the next weekly report; disabled reports stay off.\n";
 } catch (Throwable $e) {
     fwrite(STDERR, 'FAIL: '.$e->getMessage()."\n".$e->getTraceAsString()."\n");
     exit(1);

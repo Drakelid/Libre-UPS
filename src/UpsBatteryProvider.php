@@ -44,7 +44,7 @@ class UpsBatteryProvider extends ServiceProvider
         $settings = PluginSettings::fromArray($pluginManager->getSettings(self::PLUGIN));
         if ($settings->report->isActive()) {
             $this->callAfterResolving(Schedule::class, function (Schedule $schedule) use ($settings): void {
-                $schedule->command(SendReport::class)->weeklyOn($settings->report->day, $settings->report->time);
+                $schedule->command(SendReport::class)->weeklyOn($settings->report->day, $settings->report->time)->onOneServer();
             });
         }
     }
