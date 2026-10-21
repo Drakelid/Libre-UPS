@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Drakelid\UpsBattery\Report\MatrixBuilder;
 use Drakelid\UpsBattery\Report\MatrixRow;
 use Drakelid\UpsBattery\Report\ReportRow;
+use Drakelid\UpsBattery\Report\Severity;
 
 /**
  * Two devices with two sensors per class, plus a third device that only has a runtime sensor.
@@ -33,6 +34,38 @@ function matrixHostnames(array $rows): array
 {
     return array_map(fn (MatrixRow $row): string => $row->hostname, $rows);
 }
+
+it('chooses the most severe state even when a healthy state has a larger vendor code', function (): void {
+    $result = (new MatrixBuilder)->build(['state' => [
+        makeRow(['sensorId' => 1, 'sensorClass' => 'state', 'sensorType' => 'upsmgBatteryFaultBattery', 'value' => 1.0, 'valueFormatted' => 'Fault', 'severity' => Severity::Critical]),
+        makeRow(['sensorId' => 2, 'sensorClass' => 'state', 'sensorType' => 'upsmgBatteryChargerFault', 'value' => 2.0, 'valueFormatted' => 'OK', 'severity' => Severity::Ok]),
+    ]], makeMatrixFilters(['classes' => 'state']));
+
+    expect($result['rows'][0]->cells['state']->sensorId)->toBe(1)
+        ->and($result['rows'][0]->cells['state']->severity)->toBe(Severity::Critical);
+});
+
+it('breaks equally severe state ties by sensor id', function (): void {
+    $result = (new MatrixBuilder)->build(['state' => [
+        makeRow(['sensorId' => 2, 'sensorClass' => 'state', 'value' => 9.0, 'severity' => Severity::Critical]),
+        makeRow(['sensorId' => 1, 'sensorClass' => 'state', 'value' => 1.0, 'severity' => Severity::Critical]),
+    ]], makeMatrixFilters(['classes' => 'state']));
+
+    expect($result['rows'][0]->cells['state']->sensorId)->toBe(1);
+});
+
+it('sorts state columns by severity and keeps missing readings last', function (string $dir, array $expected): void {
+    $result = (new MatrixBuilder)->build(['state' => [
+        makeRow(['deviceId' => 1, 'hostname' => 'critical', 'sensorClass' => 'state', 'value' => 1.0, 'severity' => Severity::Critical]),
+        makeRow(['deviceId' => 2, 'hostname' => 'healthy', 'sensorClass' => 'state', 'value' => 9.0, 'severity' => Severity::Ok]),
+        makeRow(['deviceId' => 3, 'hostname' => 'missing', 'sensorClass' => 'state', 'value' => null, 'severity' => Severity::Unknown]),
+    ]], makeMatrixFilters(['classes' => 'state', 'dir' => $dir]));
+
+    expect(matrixHostnames($result['rows']))->toBe($expected);
+})->with([
+    ['desc', ['critical', 'healthy', 'missing']],
+    ['asc', ['healthy', 'critical', 'missing']],
+]);
 
 it('builds one row per device with the worst sensor per metric', function (): void {
     $result = (new MatrixBuilder)->build(matrixFixture(), makeMatrixFilters(['classes' => 'runtime,load', 'limit' => '0']));

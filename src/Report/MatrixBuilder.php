@@ -9,7 +9,8 @@ final class MatrixBuilder
 {
     /**
      * For every class the worst sensor per device is used: lowest value for classes where low is bad
-     * (runtime, charge), highest value for the others (load, temperature, ...), see SortPolicy.
+     * (runtime, charge), highest value for the others (load, temperature, ...), see SortPolicy. State sensors
+     * use severity because their numeric codes belong to different vendor enums.
      *
      * When a suspect rule is given and the runtime and load metrics are selected, every device also gets a
      * suspect battery verdict (null when runtime or load is missing), and the "suspect only" filter works.
@@ -21,7 +22,7 @@ final class MatrixBuilder
     {
         $devices = [];
         foreach ($filters->classes as $class) {
-            $mode = SortPolicy::defaultDirection($class) === 'asc' ? 'min' : 'max';
+            $mode = $class === 'state' ? 'worst' : (SortPolicy::defaultDirection($class) === 'asc' ? 'min' : 'max');
 
             foreach (Aggregator::reduce($rowsByClass[$class] ?? [], $mode) as $row) {
                 if (! isset($devices[$row->deviceId])) {
@@ -83,7 +84,7 @@ final class MatrixBuilder
             $primary = match ($filters->sort) {
                 'hostname' => RowProcessor::compareText($a->hostname, $b->hostname, $ascending),
                 'location' => RowProcessor::compareText($a->location, $b->location, $ascending),
-                default => $this->compareCell($a->cells[$filters->sort] ?? null, $b->cells[$filters->sort] ?? null, $ascending),
+                default => $this->compareCell($a->cells[$filters->sort] ?? null, $b->cells[$filters->sort] ?? null, $ascending, $filters->sort === 'state'),
             };
 
             if ($primary !== 0) {
@@ -99,7 +100,7 @@ final class MatrixBuilder
     }
 
     /** Missing cells and null values always sort last, regardless of direction. */
-    private function compareCell(?ReportRow $a, ?ReportRow $b, bool $ascending): int
+    private function compareCell(?ReportRow $a, ?ReportRow $b, bool $ascending, bool $isState): int
     {
         $valueA = $a?->value;
         $valueB = $b?->value;
@@ -108,7 +109,7 @@ final class MatrixBuilder
             return ($valueA === null ? 1 : 0) <=> ($valueB === null ? 1 : 0);
         }
 
-        $result = $valueA <=> $valueB;
+        $result = $isState ? $a->severity->rank() <=> $b->severity->rank() : $valueA <=> $valueB;
 
         return $ascending ? $result : -$result;
     }

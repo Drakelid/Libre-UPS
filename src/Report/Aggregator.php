@@ -9,7 +9,7 @@ final class Aggregator
 {
     /**
      * @param  ReportRow[]  $rows
-     * @param  string  $mode  none|min|max
+     * @param  string  $mode  none|min|max|worst (state severity)
      * @return ReportRow[]
      */
     public static function reduce(array $rows, string $mode): array
@@ -42,6 +42,12 @@ final class Aggregator
 
         if ($current->value === null) {
             return true;
+        }
+
+        if ($mode === 'worst') {
+            return $candidate->severity === $current->severity
+                ? $candidate->sensorId < $current->sensorId
+                : $candidate->severity->rank() > $current->severity->rank();
         }
 
         if ($candidate->value === $current->value) {
