@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Shell syntax
-        run: bash -n scripts/install.sh scripts/verify.sh tests/shell/install.test.sh
+        run: for script in scripts/*.sh tests/shell/*.sh; do bash -n "$script" || exit 1; done
       - name: Installer verification failures
         run: bash tests/shell/install.test.sh
 
