@@ -27,13 +27,14 @@ class UpsBatteryProvider extends ServiceProvider
         $pluginManager->publishHook(self::PLUGIN, SettingsHook::class, Settings::class);
         $pluginManager->publishHook(self::PLUGIN, DeviceOverviewHook::class, DeviceOverview::class);
 
-        if (! $pluginManager->pluginEnabled(self::PLUGIN)) {
-            return;
-        }
-
+        // Keep cached routes stable across enable/disable changes; middleware checks availability per request.
         $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
         $this->loadViewsFrom(__DIR__.'/../resources/views', self::PLUGIN);
         $this->loadTranslationsFrom(__DIR__.'/../lang', self::PLUGIN);
+
+        if (! $pluginManager->pluginEnabled(self::PLUGIN)) {
+            return;
+        }
 
         if ($this->app->runningInConsole()) {
             $this->commands([SendReport::class]);
