@@ -169,7 +169,7 @@ Showing 5 of 38 · min 4 min · median 22 min · max 1 h 1 min
 | IFK-2 | Tilgang | Rutene krever innlogging (`web`, `auth`). Data filtreres med `hasAccess($user)`. |
 | IFK-3 | Sikkerhet | All input valideres mot hvitelister fra databasen; ingen rå SQL med brukerinput; LIKE-søk escaper `%`, `_` og `\`. Data settes inn i DOM med `textContent`, aldri `innerHTML`. |
 | IFK-4 | Kompatibilitet | LibreNMS 26.x (testet mot 26.9.1.1), PHP ^8.2, Laravel 12. |
-| IFK-5 | Drift | Ingen migreringer, ingen påvirkning på polling. Når pluginen er deaktivert i *Plugin Admin*, registreres ingen ruter. |
+| IFK-5 | Drift | Ingen migreringer, ingen påvirkning på polling. Når pluginen er deaktivert i *Plugin Admin*, returnerer alle pluginruter HTTP 404. Rutene registreres uavhengig av status slik at også mellomlagrede ruter støtter aktivering og deaktivering; tilgjengeligheten kontrolleres for hver forespørsel. |
 | IFK-6 | Vedlikehold | README, CHANGELOG, semantisk versjonering, Laravel Pint (preset `laravel`). |
 | IFK-7 | Språk | Grensesnitt på engelsk via oversettelsesfil `lang/en/ups-battery.php`. Norsk (`lang/nb`) er v2. |
 

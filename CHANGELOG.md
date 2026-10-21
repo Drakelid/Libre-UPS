@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - A1: report endpoints, exports, the menu and device cards enforce LibreNMS' sensor-view policy. Custom roles with device access alone no longer bypass sensor permissions; standard user, global-read and admin roles keep their existing access.
+- A2: ambiguous output states such as "on Inverter" allow the other power sensors to decide whether the UPS is on battery. "UPS Off" displays as output off.
+- A3: compare-metrics state cells select and sort by severity instead of comparing unrelated vendor numeric codes.
+- A4: disabled plugins return HTTP 404 even with cached routes; enabling a plugin also works with a cache built while it was disabled.
+- A5: battery replacement dates use the timestamp of the sensor whose value is available, in both the overview and device card.
+- A6: switching to an empty sensor selection cancels pending requests so stale rows cannot overwrite the empty view.
+- A7: configured automatic refresh recovers from failed initial options or data requests, including kiosk mode.
+- A8: the weekly report uses Laravel's single-server scheduler mutex to avoid duplicate emails from scheduler nodes sharing a cache.
+- A9: UPSs exposing only battery-date sensors appear in the overview and weekly report. Battery dates remain excluded from remaining-runtime metrics.
+- A10: editing both search fields within the debounce interval preserves both filters, including in exports and shared links.
+- A11: the installer exits unsuccessfully when the database/plugin-state check fails or returns an unreadable result.
+- A12: CSV formula protection also handles leading whitespace and control characters while preserving numeric exports.
+
+### Upgrade notes
+
+- Clear existing route caches once after updating (`php artisan route:clear` as the LibreNMS owner); run `php artisan route:cache` again if the installation caches routes. The install script already clears route and view caches. Routes remain registered while disabled, with availability enforced on every request.
+- Scheduler nodes must share a cache store supporting Laravel's scheduler mutex (for example the same Redis service, database and cache prefix). Otherwise run the scheduler on one node. This does not add a new plugin setting or change the email schedule.
+- Review custom roles that need the reports and grant the appropriate sensor permission. No database migrations or saved-setting changes are needed.
 
 ## [1.4.0] - 2026-10-08
 

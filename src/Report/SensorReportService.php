@@ -227,7 +227,7 @@ final class SensorReportService
     }
 
     /**
-     * UPS overview: one row per UPS (a device with a runtime or charge sensor) with all its sensors,
+     * UPS overview: one row per UPS (remaining runtime, charge or a battery date) with all its sensors,
      * the battery install date entered by users and the summary cards.
      *
      * @return array{rows: UpsRow[], total: int, cards: array<string, mixed>}
@@ -385,8 +385,8 @@ final class SensorReportService
     }
 
     /**
-     * Whether the device is a UPS (or another battery-backed device): it has a battery charge or a remaining
-     * battery time. Uptimes, run hours and battery dates in the runtime class do not count.
+     * Whether the device is a UPS (or another battery-backed device): it has a battery charge, remaining
+     * battery time or a recognised battery date. Uptimes and run hours do not count.
      */
     public function hasDeviceSensors(Device $device): bool
     {

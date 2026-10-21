@@ -189,7 +189,7 @@ The other columns of the UPS overview come from the sensors LibreNMS has discove
 
 ### Supported UPSs
 
-The plugin reads the sensors LibreNMS discovers, so any UPS that LibreNMS monitors with a battery charge or a remaining battery time shows up. The sensor names of every UPS OS in LibreNMS were checked, and these are recognised in particular:
+The plugin reads the sensors LibreNMS discovers, so any UPS that LibreNMS monitors with a battery charge, remaining battery time or recognised battery replacement date shows up. Battery dates identify a UPS but are never used as remaining runtime. The sensor names of every UPS OS in LibreNMS were checked, and these are recognised in particular:
 
 | LibreNMS OS | Status / on battery | Battery status | Self-test | Battery dates |
 | --- | --- | --- | --- | --- |
@@ -221,6 +221,7 @@ Where you see it: the **Battery** column in the compare view (select runtime and
 Switch it on in the settings and enter one or more recipients. Every week, on the day and time you choose, LibreNMS' scheduler sends an HTML email with the number of UPSes, critical and warning counts, the UPSes with the shortest runtime (top 10, 25, 50 or 100), the suspect batteries and the battery swaps that are overdue or due within the warning window.
 
 - It uses the email settings of LibreNMS (*Global Settings > Alerting*) and the scheduler LibreNMS already runs every minute, so nothing needs to be added to cron.
+- If several nodes run the scheduler, they must share a cache store that supports Laravel's scheduler mutex (for example the same Redis service, database and cache prefix). The weekly job then runs on one node. With independent caches, run the scheduler on only one node.
 - It covers all devices of the selected default device type, regardless of who is logged in.
 - The links in the email use `APP_URL` from the LibreNMS `.env`; set it if they point to `localhost`.
 - Try it without sending anything: `sudo -u librenms php artisan ups-battery:report --dry-run`. Send to someone else once with `--to=name@example.com`.
@@ -241,7 +242,7 @@ Which classes exist depends on what each UPS exposes over SNMP; the metric list 
 
 ## API
 
-The page is backed by JSON endpoints that can also be used directly. All routes require a logged-in user (session cookie).
+The page is backed by JSON endpoints that can also be used directly. All routes require a logged-in user (session cookie), an enabled plugin and LibreNMS' sensor-view permission. Disabled plugins return HTTP 404, including when routes are cached.
 
 | Route | Purpose |
 | --- | --- |
@@ -257,6 +258,8 @@ The page is backed by JSON endpoints that can also be used directly. All routes 
 `limit=0` returns every row. `sensor` filters on the sensor name, `suspect=1` keeps only suspect batteries (needs `runtime` and `load` in `classes`). Invalid parameters return HTTP 422 with `{"message": "..."}`. The full request and response shapes are in chapters 12 to 14 of the [specification](Prosjektspesifikasjon-UPS-Battery.md).
 
 ## Troubleshooting
+
+After upgrading from a version before these audit fixes, clear existing route caches once as the LibreNMS owner: `php artisan route:clear`, then `php artisan route:cache` if you normally cache routes. The install script already clears route and view caches. Custom roles that need reports must have the appropriate sensor permission (normally `sensor.view`); no database migration or settings reset is required.
 
 | Symptom | Fix |
 | --- | --- |
@@ -282,9 +285,18 @@ composer lint   # Laravel Pint, preset "laravel"; composer fix applies the fixes
 npm ci
 npm run check   # syntax check of resources/js/report.js
 npm test        # the page script against the real page markup in jsdom, fetch mocked
+
+bash tests/shell/install.test.sh  # isolated installer success/failure checks; no installation
+
+# Uses real LibreNMS models/framework with an in-memory SQLite database; never opens the installed database.
+# PHP needs pdo_sqlite. The LibreNMS checkout must already have its Composer dependencies.
+export LIBRENMS_DIR=/path/to/librenms
+php tests/integration/access.php
+php tests/integration/sensors.php
+php tests/integration/deployment.php
 ```
 
-GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs the PHP checks on PHP 8.2, 8.3 and 8.4 and the JavaScript checks on every push. [`integration.yml`](.github/workflows/integration.yml) installs the plugin into a real LibreNMS (run it by hand or wait for the weekly run) and checks that it boots, registers its routes and command and compiles its views. It has not been run yet, so treat the first run as a test of the workflow itself.
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs the PHP checks on PHP 8.2, 8.3 and 8.4, JavaScript checks and installer regressions. [`integration.yml`](.github/workflows/integration.yml) runs the permission, sensor-query, route-cache and scheduler regressions and installs the plugin into a real LibreNMS (run it by hand or wait for the weekly run). It also checks that the plugin boots, registers its routes and command and compiles its views. The isolated regressions have been run locally against LibreNMS 26.10.0; the full installation workflow still needs an Actions run.
 
 | Folder | Contents |
 | --- | --- |
@@ -294,7 +306,7 @@ GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs the PHP checks on PHP
 | `resources/js/` | `report.js`, the page script (no build step, no dependencies) |
 | `lang/` | English and Norwegian (bokmål) strings, kept at the same keys |
 | `scripts/` | `install.sh` and `verify.sh` |
-| `tests/` | Pest tests (`Unit/`) and jsdom tests for the page script (`js/`) |
+| `tests/` | Pest tests (`Unit/`), jsdom page tests (`js/`), isolated LibreNMS integration checks (`integration/`) and installer regressions (`shell/`) |
 
 `SensorReportService`, the controller, the hooks and the rendered pages need a LibreNMS with data. They are checked with `scripts/verify.sh` and the acceptance checklist in the specification.
 
