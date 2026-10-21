@@ -429,8 +429,11 @@ else
     failures=$((failures + 1))
 fi
 
-state_out="$("${ARTISAN[@]}" tinker --execute='echo "UB_ACTIVE=".(int) (App\Models\Plugin::where("plugin_name", "'"$PLUGIN_NAME"'")->value("plugin_active") ?? -1).PHP_EOL;' 2>&1)"
-active="$(printf '%s\n' "$state_out" | sed -n 's/.*UB_ACTIVE=\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | tail -n 1)"
+if state_out="$("${ARTISAN[@]}" tinker --execute='echo "UB_ACTIVE=".(int) (App\Models\Plugin::where("plugin_name", "'"$PLUGIN_NAME"'")->value("plugin_active") ?? -1).PHP_EOL;' 2>&1)"; then
+    active="$(printf '%s\n' "$state_out" | sed -n 's/.*UB_ACTIVE=\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | tail -n 1)"
+else
+    active=""
+fi
 case "$active" in
     1)
         ok "plugin '$PLUGIN_NAME' is enabled"
@@ -446,7 +449,8 @@ case "$active" in
         bad "LibreNMS does not know the plugin '$PLUGIN_NAME' (service provider not discovered). Try: composer dump-autoload, then re-run"
         failures=$((failures + 1)) ;;
     *)
-        warn "could not read the plugin state from the database:"
+        bad "could not read the plugin state from the database:"
+        failures=$((failures + 1))
         printf '%s\n' "$state_out" | tail -n 5 | sed 's/^/         /' ;;
 esac
 
