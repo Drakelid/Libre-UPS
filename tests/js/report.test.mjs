@@ -145,6 +145,23 @@ function cell(formatted, severity) {
 
 const wait = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
+/** Fetch and response-body reads both reject when their request is aborted. */
+function abortable(promise, signal) {
+    if (!signal) { return promise; }
+    if (signal.aborted) { return Promise.reject(signal.reason); }
+    return new Promise((resolve, reject) => {
+        const abort = () => reject(signal.reason);
+        signal.addEventListener('abort', abort, { once: true });
+        Promise.resolve(promise).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    });
+}
+
 // The page script keeps timers running (age ticker, auto-refresh), which would keep node alive after the tests.
 const windows = [];
 after(() => { windows.forEach((window) => window.close()); });
@@ -174,11 +191,11 @@ async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0
     dom.window.fetch = async (url, init = {}) => {
         // Like a browser, a path is resolved against the document's base URL (LibreNMS' <base href>).
         const parsed = new URL(url, dom.window.document.baseURI);
-        calls.push({ origin: parsed.origin, path: parsed.pathname, params: parsed.searchParams, method: init.method ?? 'GET', body: init.body, headers: init.headers ?? {} });
+        calls.push({ origin: parsed.origin, path: parsed.pathname, params: parsed.searchParams, method: init.method ?? 'GET', body: init.body, headers: init.headers ?? {}, signal: init.signal });
         const handler = handlers[parsed.pathname];
         if (handler === undefined) { return { ok: false, status: 404, json: async () => ({ message: 'not found' }) }; }
-        const body = typeof handler === 'function' ? handler(parsed, init) : handler;
-        return { ok: true, status: 200, json: async () => body };
+        const body = await abortable(Promise.resolve().then(() => typeof handler === 'function' ? handler(parsed, init) : handler), init.signal);
+        return { ok: true, status: 200, json: () => abortable(Promise.resolve(body), init.signal) };
     };
 
     dom.window.eval(script);
@@ -227,6 +244,40 @@ test('single view: shows a row per sensor with severity colour, link and trend i
     assert.equal(first.querySelector('a.ub-trend').getAttribute('href'), ORIGIN + '/graphs/type=sensor_runtime/id=11/from=-1y');
     assert.ok(second.textContent.includes('1 h 1 min'));
 });
+
+for (const mode of ['single', 'matrix']) {
+    test(`changing to a type without sensors cancels a pending ${mode} response`, async () => {
+        const pending = deferred();
+        const endpoint = mode === 'single' ? '/plugin/ups-battery/data' : '/plugin/ups-battery/matrix';
+        const page = await boot({
+            initial: { view: mode },
+            routes: {
+                '/plugin/ups-battery/options': (url) => ({
+                    ...DEFAULT_ROUTES['/plugin/ups-battery/options'],
+                    types: [{ value: 'power', count: 3 }, { value: 'firewall', count: 1 }],
+                    classes: url.searchParams.get('type') === 'firewall' ? [] : CLASSES,
+                }),
+                [endpoint]: () => pending.promise,
+            },
+        });
+        const oldRequest = page.last(endpoint);
+        assert.ok(oldRequest, 'the old report request is pending');
+
+        page.$('ub-type').value = 'firewall';
+        fire(page.window, page.$('ub-type'), 'change');
+        await wait();
+        assert.equal(page.rows()[0].textContent, 'empty');
+
+        pending.resolve(DEFAULT_ROUTES[endpoint](new URL(ORIGIN + endpoint)));
+        await wait();
+        assert.equal(page.rows()[0].textContent, 'empty');
+        assert.equal(page.$('ub-body').querySelector('a'), null);
+        assert.equal(page.$('ub-summary').textContent, '');
+        assert.equal(page.$('ub-table').style.opacity, '');
+        assert.equal(oldRequest.signal.aborted, true);
+        assert.equal(page.$('ub-error').style.display, 'none');
+    });
+}
 
 test('requests and links stay on the page origin when LibreNMS\' <base href> names another host', async () => {
     const page = await boot();

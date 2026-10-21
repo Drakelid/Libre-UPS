@@ -339,6 +339,7 @@
     // ---- data ----
 
     function loadData() {
+        if (dataCtl) { dataCtl.abort(); }
         updateUrl();
         const matrix = state.view === 'matrix';
         const ups = state.view === 'ups';
@@ -347,10 +348,11 @@
             buildHead([{ sort: 'hostname', label: T.columns.hostname }]);
             renderEmpty(1);
             el('ub-summary').textContent = '';
+            el('ub-table').style.opacity = '';
+            showError(null);
             return Promise.resolve();
         }
 
-        if (dataCtl) { dataCtl.abort(); }
         dataCtl = new AbortController();
         el('ub-table').style.opacity = '0.5';
 
