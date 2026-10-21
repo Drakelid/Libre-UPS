@@ -185,7 +185,9 @@ final class CsvFormatter
     /** Prefix a quote to text that spreadsheets would otherwise evaluate as a formula. */
     private function guard(string $cell): string
     {
-        if ($cell === '' || strpbrk($cell[0], '=+-@') === false) {
+        // Spreadsheet importers may discard leading whitespace and control characters before parsing a formula.
+        $start = preg_replace('/^[\s\p{Z}\p{C}]+/u', '', $cell) ?? ltrim($cell, "\x00..\x20\x7f");
+        if ($start === '' || strpbrk($start[0], '=+-@') === false) {
             return $cell;
         }
 

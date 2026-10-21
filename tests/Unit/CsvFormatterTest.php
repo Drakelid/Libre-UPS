@@ -56,6 +56,22 @@ it('neutralises spreadsheet formulas', function (string $input): void {
         ->and($line[4])->toBe("'".$input);
 })->with(['=SUM(A1)', '+cmd', '-evil', '@SUM(1)']);
 
+it('neutralises formulas after leading whitespace or control characters', function (string $input): void {
+    $line = (new CsvFormatter)->line(makeRow(['displayName' => $input, 'location' => $input, 'sensorDescr' => $input]));
+
+    expect($line[1])->toBe("'".$input)
+        ->and($line[2])->toBe("'".$input)
+        ->and($line[4])->toBe("'".$input);
+})->with(["\t=1+1", "\r=1+1", "\n=1+1", '  =1+1', " \t+SUM(A1)", "\0@SUM(A1)", "\u{00A0}=1+1"]);
+
+it('preserves numeric values and harmless whitespace in CSV exports', function (): void {
+    $line = (new CsvFormatter)->line(makeRow(['location' => '  Site A', 'sensorDescr' => "\tRuntime", 'value' => -12.5]));
+
+    expect($line[2])->toBe('  Site A')
+        ->and($line[4])->toBe("\tRuntime")
+        ->and($line[5])->toBe('-12,5');
+});
+
 it('leaves plain negative numbers in text cells alone', function (): void {
     expect((new CsvFormatter)->line(makeRow(['location' => '-12,5']))[2])->toBe('-12,5');
 });
