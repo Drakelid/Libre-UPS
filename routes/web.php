@@ -1,9 +1,10 @@
 <?php
 
+use App\Models\Sensor;
 use Drakelid\UpsBattery\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth'])->prefix('plugin/ups-battery')->group(function (): void {
+Route::middleware(['web', 'auth', 'can:viewAny,'.Sensor::class])->prefix('plugin/ups-battery')->group(function (): void {
     Route::get('report', [ReportController::class, 'page'])->name('ups-battery.report');
     Route::get('data', [ReportController::class, 'data'])->name('ups-battery.data');
     Route::get('matrix', [ReportController::class, 'matrix'])->name('ups-battery.matrix');

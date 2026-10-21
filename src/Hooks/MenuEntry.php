@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drakelid\UpsBattery\Hooks;
 
+use App\Models\Sensor;
 use Drakelid\UpsBattery\Report\PluginSettings;
 use LibreNMS\Interfaces\Plugins\Hooks\MenuEntryHook;
 
@@ -11,7 +12,7 @@ class MenuEntry implements MenuEntryHook
 {
     public function authorize(): bool
     {
-        return true;
+        return auth()->user()?->can('viewAny', Sensor::class) ?? false;
     }
 
     /**

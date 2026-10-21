@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A1: report endpoints, exports, the menu and device cards enforce LibreNMS' sensor-view policy. Custom roles with device access alone no longer bypass sensor permissions; standard user, global-read and admin roles keep their existing access.
+
 ## [1.4.0] - 2026-10-08
 
 ### Added

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drakelid\UpsBattery\Hooks;
 
 use App\Models\Device;
+use App\Models\Sensor;
 use App\Models\User;
 use App\Plugins\Hooks\DeviceOverviewHook;
 use Drakelid\UpsBattery\Report\PluginSettings;
@@ -19,7 +20,9 @@ class DeviceOverview extends DeviceOverviewHook
 
     public function authorize(User $user, Device $device): bool
     {
-        return app(SensorReportService::class)->hasDeviceSensors($device);
+        return $user->can('viewAny', Sensor::class)
+            && $user->can('view', $device)
+            && app(SensorReportService::class)->hasDeviceSensors($device);
     }
 
     /**

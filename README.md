@@ -62,7 +62,7 @@ ups-stasjon-03   Stasjon C   Battery runtime  18 minutes        4 min ago
 
 **Permissions**
 
-- Every logged-in user can open the page and sees only the devices and device groups LibreNMS lets them see.
+- Access follows LibreNMS' sensor-view policy and is restricted to the devices and device groups the user may see. The normal user, global-read and admin roles retain access; custom roles need the appropriate sensor permission (normally `sensor.view`). The menu and device card follow the same policy.
 - Temperatures follow each user's °C/°F preference.
 - Battery install dates can be set by users with the LibreNMS permission to update devices.
 - The only data the plugin writes is each user's saved views (in the LibreNMS user preferences), the battery install dates (as a device attribute) and its settings.
