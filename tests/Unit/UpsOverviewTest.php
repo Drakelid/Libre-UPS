@@ -141,6 +141,17 @@ it('knows no swap date without any date', function (): void {
         ->and($swap->toArray())->toBe(['installed' => null, 'due' => null, 'days_left' => null, 'source' => 'none', 'severity' => 'unknown', 'life_used' => null]);
 });
 
+it('anchors the fallback replacement date to the reading that supplies its value', function (): void {
+    $row = upsBuilder()->row([
+        upsSensor(1, 'runtime', null, ['sensorIndex' => 'upsAdvBatteryRecommendedReplaceDate.0', 'lastUpdate' => '2025-10-08T12:00:00+00:00']),
+        upsSensor(1, 'runtime', -365 * 1440.0, ['sensorIndex' => 'upsBasicBatteryLastReplaceDate.0', 'lastUpdate' => UPS_NOW]),
+    ], null);
+
+    expect($row->swap->source)->toBe('ups_last')
+        ->and($row->swap->installed)->toBe('2025-10-08')
+        ->and($row->swap->due)->toBe('2029-10-08');
+});
+
 it('ignores an invalid install date', function (): void {
     expect(BatterySwap::parseDate('2026-02-30'))->toBeNull()
         ->and(BatterySwap::parseDate('8.10.2026'))->toBeNull()

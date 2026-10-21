@@ -100,7 +100,7 @@ final class UpsBuilder
             $installed,
             $replaceDue?->value,
             $replacedAt?->value,
-            ($replaceDue ?? $replacedAt)?->lastUpdate,
+            ($replaceDue?->value !== null ? $replaceDue : $replacedAt)?->lastUpdate,
             $this->lifetimeMonths,
             $this->warnDays,
             $this->now,
