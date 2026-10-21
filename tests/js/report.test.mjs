@@ -162,12 +162,24 @@ function abortable(promise, signal) {
     });
 }
 
+/** Advances just interval callbacks, keeping request promises and DOM events real. */
+function intervalClock() {
+    let nextId = 0;
+    const callbacks = new Map();
+    return {
+        setInterval(callback, ms) { const id = ++nextId; callbacks.set(id, { callback, ms }); return id; },
+        clearInterval(id) { callbacks.delete(id); },
+        tick(ms) { [...callbacks.values()].filter((entry) => entry.ms === ms).forEach((entry) => entry.callback()); },
+        count(ms) { return [...callbacks.values()].filter((entry) => entry.ms === ms).length; },
+    };
+}
+
 // The page script keeps timers running (age ticker, auto-refresh), which would keep node alive after the tests.
 const windows = [];
 after(() => { windows.forEach((window) => window.close()); });
 
 /** Opens the page with the script running. `search` is the query string of the address, e.g. "?kiosk=1". */
-async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0, defaultView = undefined, texts = {} } = {}) {
+async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0, defaultView = undefined, texts = {}, intervals = null } = {}) {
     const config = {
         defaults: { type: 'power', class: 'runtime', limit: 25 },
         initial,
@@ -185,6 +197,10 @@ async function boot({ search = '', initial = {}, routes = {}, refreshSeconds = 0
 
     const dom = new JSDOM(pageHtml(config), { url: ORIGIN + PAGE + search, runScripts: 'outside-only', pretendToBeVisual: true });
     windows.push(dom.window);
+    if (intervals) {
+        dom.window.setInterval = intervals.setInterval;
+        dom.window.clearInterval = intervals.clearInterval;
+    }
     const calls = [];
     const handlers = { ...DEFAULT_ROUTES, ...routes };
 
@@ -511,6 +527,56 @@ test('auto-refresh is offered only when the plugin setting allows it', async () 
 
     assert.equal(off.$('ub-refresh-group').style.display, 'none');
     assert.equal(on.$('ub-refresh').checked, true);
+});
+
+for (const mode of ['auto-refresh', 'kiosk']) {
+    for (const failedEndpoint of ['options', 'data']) {
+        test(`${mode} recovers from a failed initial ${failedEndpoint} request with one refresh timer`, async () => {
+            const intervals = intervalClock();
+            let attempts = 0;
+            const endpoint = '/plugin/ups-battery/' + failedEndpoint;
+            const page = await boot({
+                refreshSeconds: mode === 'auto-refresh' ? 300 : 0,
+                initial: mode === 'kiosk' ? { kiosk: '1' } : {},
+                intervals,
+                routes: {
+                    [endpoint]: (url) => {
+                        if (++attempts === 1) { throw new Error('temporarily unavailable'); }
+                        const handler = DEFAULT_ROUTES[endpoint];
+                        return typeof handler === 'function' ? handler(url) : handler;
+                    },
+                },
+            });
+            assert.match(page.$('ub-error').textContent, /temporarily unavailable/);
+
+            intervals.tick(300000);
+            await wait();
+            assert.equal(page.rows().length, 2);
+            assert.equal(page.$('ub-error').style.display, 'none');
+            assert.equal(attempts, 2);
+            assert.equal(intervals.count(300000), 1);
+
+            const dataRequests = page.calls.filter((call) => call.path === '/plugin/ups-battery/data').length;
+            intervals.tick(300000);
+            await wait();
+            assert.equal(page.calls.filter((call) => call.path === '/plugin/ups-battery/data').length, dataRequests + 1);
+            assert.equal(intervals.count(300000), 1);
+            assert.equal(page.$('ub-refresh').checked, mode === 'auto-refresh');
+        });
+    }
+}
+
+test('a startup failure does not enable auto-refresh when it is switched off', async () => {
+    const intervals = intervalClock();
+    const page = await boot({
+        intervals,
+        routes: { '/plugin/ups-battery/options': () => { throw new Error('temporarily unavailable'); } },
+    });
+    assert.match(page.$('ub-error').textContent, /temporarily unavailable/);
+    intervals.tick(300000);
+    await wait();
+    assert.equal(page.calls.filter((call) => call.path === '/plugin/ups-battery/options').length, 1);
+    assert.equal(intervals.count(300000), 0);
 });
 
 // ---- UPS overview ----

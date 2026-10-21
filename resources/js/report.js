@@ -25,6 +25,7 @@
 
     const state = {};
     let options = { types: [], os: [], groups: [], classes: [] };
+    let optionsReady = false;
     let last = null;
     let savedViews = [];
     let optionsCtl = null;
@@ -326,12 +327,14 @@
     }
 
     function loadOptions(retry) {
+        optionsReady = false;
         if (optionsCtl) { optionsCtl.abort(); }
         optionsCtl = new AbortController();
         const requestedType = state.type;
         return getJson(cfg.urls.options + '?type=' + encodeURIComponent(state.type), optionsCtl.signal).then((body) => {
             applyOptions(body);
             if (retry !== false && requestedType !== state.type) { return loadOptions(false); }
+            optionsReady = true;
             return null;
         });
     }
@@ -1342,7 +1345,10 @@
         const seconds = refreshInterval();
         if (seconds > 0 && (el('ub-refresh').checked || state.kiosk)) {
             refreshTimer = setInterval(() => {
-                if (!document.hidden) { loadData().catch(handleFailure); }
+                if (!document.hidden) {
+                    const refresh = optionsReady ? loadData() : loadOptions().then(loadData);
+                    refresh.catch(handleFailure);
+                }
             }, seconds * 1000);
         }
     }
@@ -1428,7 +1434,8 @@
         setInterval(refreshAges, 30000);
 
         loadViews().catch(() => { /* saved views are optional */ });
-        loadOptions().then(loadData).then(setupRefresh).catch(handleFailure);
+        setupRefresh();
+        loadOptions().then(loadData).catch(handleFailure);
     }
 
     init();
