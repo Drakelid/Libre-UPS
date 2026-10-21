@@ -362,6 +362,29 @@ test('the sensor name filter is sent after a short pause', async () => {
     assert.equal(page.last('/plugin/ups-battery/data').params.get('sensor'), 'Replace battery');
 });
 
+for (const order of [['q', 'sensor'], ['sensor', 'q']]) {
+    test(`editing ${order.join(' then ')} within one debounce keeps both filters`, async () => {
+        const page = await boot();
+        const values = { q: 'rack-a', sensor: 'Battery' };
+        const before = page.calls.length;
+        for (const key of order) {
+            page.$('ub-' + key).value = values[key];
+            fire(page.window, page.$('ub-' + key), 'input');
+        }
+        assert.equal(page.calls.length, before, 'fetching is still debounced');
+        await wait(350);
+
+        const request = page.last('/plugin/ups-battery/data');
+        for (const key of ['q', 'sensor']) {
+            assert.equal(request.params.get(key), values[key]);
+            assert.equal(page.$('ub-' + key).value, values[key]);
+            assert.equal(new URL(page.$('ub-csv').href).searchParams.get(key), values[key]);
+            assert.equal(new URL(page.window.location.href).searchParams.get(key), values[key]);
+        }
+        assert.equal(page.calls.length, before + 1);
+    });
+}
+
 test('export links follow the filters, and "export all" asks for every row', async () => {
     const page = await boot({ search: '?q=site&limit=10', initial: { q: 'site', limit: '10' } });
 

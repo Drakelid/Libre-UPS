@@ -1398,9 +1398,9 @@
 
         const onText = (id, key) => {
             el(id).addEventListener('input', (e) => {
-                const value = e.target.value.trim();
+                state[key] = e.target.value.trim();
                 clearTimeout(searchTimer);
-                searchTimer = setTimeout(() => { state[key] = value; loadData().catch(handleFailure); }, 300);
+                searchTimer = setTimeout(() => { loadData().catch(handleFailure); }, 300);
             });
         };
         onText('ub-q', 'q');
