@@ -33,7 +33,7 @@ final class UpsLabels
         return match (true) {
             str_contains($text, 'bypass') || str_contains($text, 'by-pass') => 'bypass',
             str_contains($text, 'test') || str_contains($text, 'calibrat') => 'battery_test',
-            preg_match('/^off$|^no output|sleep|shutdown|inverter off/', $text) === 1 => 'off',
+            preg_match('/(?:^| )off$|^no output|sleep|shutdown|inverter off/', $text) === 1 => 'off',
             $onBattery === false => 'on_mains',
             default => 'unknown',
         };

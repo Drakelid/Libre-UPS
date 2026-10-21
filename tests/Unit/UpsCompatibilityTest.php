@@ -57,6 +57,38 @@ function compatRow(array $sensors, ?string $installed = null): ?UpsRow
     return $builder->row(array_map(fn (array $s): ReportRow => compatSensor($s), $sensors), $installed);
 }
 
+it('uses battery evidence when the output source only says the inverter is active', function (bool $withCounter): void {
+    $sensors = [
+        ['runtime', 'socomec-ups', 'upsEstimatedMinutesRemaining.1', 'Battery #1 Minutes remaining', 20.0],
+        ['state', 'upsOutputSource', '1', 'Output #1 Source', 3.0, 'on Inverter', Severity::Warning],
+        ['state', 'upsBatteryStatus', '1', 'Battery #1 Status', 5.0, 'Discharging', Severity::Warning],
+    ];
+    if ($withCounter) {
+        $sensors[] = ['runtime', 'socomec-ups', 'upsSecondsOnBattery.1', 'Battery #1 Runtime seconds', 2.0];
+    }
+
+    $row = compatRow($sensors);
+
+    expect($row->onBattery)->toBeTrue()
+        ->and($row->severity)->toBe(Severity::Critical)
+        ->and($row->toArray(fn (string $c): string => $c)['status']['key'])->toBe('on_battery');
+})->with([true, false]);
+
+it('does not infer mains power from an unrecognised output state', function (): void {
+    expect(UpsSensorKind::meansOnBattery('on Inverter'))->toBeNull()
+        ->and(UpsSensorKind::meansOnBattery('other'))->toBeNull();
+});
+
+it('shows the vendor UPS off state as output off', function (): void {
+    $row = compatRow([
+        ['runtime', 'socomec-ups', 'upsEstimatedMinutesRemaining.1', 'Battery #1 Minutes remaining', 20.0],
+        ['state', 'upsOutputSource', '1', 'Output #1 Source', 8.0, 'UPS Off', Severity::Critical],
+    ]);
+
+    expect($row->onBattery)->toBeFalse()
+        ->and($row->toArray(fn (string $c): string => $c)['status']['key'])->toBe('off');
+});
+
 it('reads every UPS OS correctly', function (array $sensors, array $expected): void {
     $row = compatRow($sensors);
 

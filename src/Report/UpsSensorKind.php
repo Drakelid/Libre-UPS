@@ -183,7 +183,16 @@ enum UpsSensorKind: string
             return false;
         }
 
-        return str_contains($text, 'batt');
+        if (str_contains($text, 'batt')) {
+            return true;
+        }
+
+        if (preg_match('/^normal(?: mode)?$|^ac$|^eco(?: mode)?$|bypass|by-pass|boost|buck|smarttrim|(?:^| )off$|sleep|shutdown|stand.?by|^no output/', $text) === 1) {
+            return false;
+        }
+
+        // An inverter can be fed by mains or batteries; let other sensors decide when the text is ambiguous.
+        return null;
     }
 
     /** A voltage or frequency reading of the mains / input side ("Input", "MainsVolt 1", "Input #1 Voltage", "L1"). */
