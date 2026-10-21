@@ -13,6 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  shell:
+    name: Installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: bash -n scripts/install.sh scripts/verify.sh tests/shell/install.test.sh
+      - name: Installer verification failures
+        run: bash tests/shell/install.test.sh
+
   php:
     name: PHP ${{ matrix.php }}
     runs-on: ubuntu-latest

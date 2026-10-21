@@ -23,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\CallableDispatcher;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Facade;
+use LibreNMS\Interfaces\Plugins\PluginManagerInterface;
 use Symfony\Component\HttpFoundation\Response;
 
 require __DIR__.'/bootstrap.php';
@@ -49,6 +50,7 @@ $app = new Container;
 Container::setInstance($app);
 Facade::setFacadeApplication($app);
 $app->instance('config', new Repository);
+$app->instance(PluginManagerInterface::class, new IntegrationPluginManager(true));
 $user = new AccessUser;
 $user->testPermissions = ['device.view'];
 $gate = new Gate($app, fn () => $user);
@@ -91,10 +93,11 @@ foreach ($router->getRoutes() as $route) {
     $route->setAction($action);
 }
 
-foreach (['report', 'options', 'data', 'data?format=csv', 'matrix', 'matrix?format=csv', 'ups', 'ups?format=csv', 'views'] as $path) {
-    integrationCheck('A1 denied sensor permission: '.$path, function () use ($router, $path): void {
+foreach (['GET report', 'GET options', 'GET data', 'GET data?format=csv', 'GET matrix', 'GET matrix?format=csv', 'GET ups', 'GET ups?format=csv', 'GET views', 'GET assets/report.js', 'POST views', 'POST views/delete', 'POST battery'] as $endpoint) {
+    [$method, $path] = explode(' ', $endpoint);
+    integrationCheck('A1 denied sensor permission: '.$endpoint, function () use ($router, $method, $path): void {
         try {
-            $router->dispatch(Request::create('/plugin/ups-battery/'.$path));
+            $router->dispatch(Request::create('/plugin/ups-battery/'.$path, $method));
         } catch (AuthorizationException) {
             return;
         }

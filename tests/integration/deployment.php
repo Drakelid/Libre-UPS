@@ -32,60 +32,9 @@ use Symfony\Component\Console\Output\NullOutput;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
-$librenms = getenv('LIBRENMS_DIR') ?: '/opt/librenms';
-if (! is_file($librenms.'/vendor/autoload.php')) {
-    fwrite(STDERR, "Set LIBRENMS_DIR to a LibreNMS checkout with Composer dependencies.\n");
-    exit(2);
-}
+require __DIR__.'/bootstrap.php';
 
-$loader = require $librenms.'/vendor/autoload.php';
-$loader->addPsr4('Drakelid\\UpsBattery\\', dirname(__DIR__, 2).'/src', true);
-
-final class DeploymentPluginManager implements PluginManagerInterface
-{
-    public function __construct(public bool $enabled, public array $settings = []) {}
-
-    public function publishHook(string $pluginName, string $hookType, string $implementationClass): bool
-    {
-        return $this->enabled;
-    }
-
-    public function hasHooks(string $hookType, array $args = [], ?string $plugin = null): bool
-    {
-        return false;
-    }
-
-    public function call(string $hookType, array $args = [], ?string $plugin = null): array
-    {
-        return [];
-    }
-
-    public function getSettings(string $pluginName): array
-    {
-        return $this->settings;
-    }
-
-    public function setSettings(string $pluginName, array $settings): bool
-    {
-        $this->settings = $settings;
-
-        return true;
-    }
-
-    public function pluginExists(string $pluginName): bool
-    {
-        return true;
-    }
-
-    public function pluginEnabled(string $pluginName): bool
-    {
-        return $this->enabled;
-    }
-
-    public function cleanupPlugins(): void {}
-}
-
-function deploymentApp(DeploymentPluginManager $plugins, ?array $compiled = null): Application
+function deploymentApp(IntegrationPluginManager $plugins, ?array $compiled = null): Application
 {
     $app = new class(dirname(__DIR__, 2)) extends Application
     {
@@ -130,7 +79,7 @@ function deploymentCheck(bool $condition, string $message): void
 
 function scheduledDeliveries(CacheFactory $cache, bool $enabled, array $settings): int
 {
-    $app = deploymentApp(new DeploymentPluginManager($enabled, $settings));
+    $app = deploymentApp(new IntegrationPluginManager($enabled, $settings));
     $app->instance(EventMutex::class, new CacheEventMutex($cache));
     $app->instance(SchedulingMutex::class, new CacheSchedulingMutex($cache));
     $schedule = $app->make(Schedule::class);
@@ -164,11 +113,11 @@ try {
     $checks = 0;
     // A cache built in either state must support both subsequent enable/disable transitions.
     foreach ([true, false] as $enabledWhenCached) {
-        $initial = deploymentApp(new DeploymentPluginManager($enabledWhenCached));
+        $initial = deploymentApp(new IntegrationPluginManager($enabledWhenCached));
         $compiled = $initial['router']->getRoutes()->compile();
         foreach ([$compiled, null] as $cache) {
             foreach ([false, true] as $enabled) {
-                $app = deploymentApp(new DeploymentPluginManager($enabled), $cache);
+                $app = deploymentApp(new IntegrationPluginManager($enabled), $cache);
                 $routes = $app['router']->getRoutes();
                 foreach (['report', 'data', 'matrix', 'ups', 'battery', 'options', 'script', 'views', 'views.save', 'views.delete'] as $name) {
                     $route = $routes->getByName('ups-battery.'.$name);
@@ -212,6 +161,8 @@ try {
         }
     };
     $settings = ['report_enabled' => '1', 'report_recipients' => 'noc@example.com'];
+    $timezone = date_default_timezone_get();
+    date_default_timezone_set('UTC');
     Carbon::setTestNow(Carbon::parse('2026-10-19 07:00:00', 'UTC'));
     try {
         $first = scheduledDeliveries($cache, true, $settings);
@@ -224,6 +175,7 @@ try {
         deploymentCheck(scheduledDeliveries($cache, true, $settings) === 1, 'The next weekly report was suppressed.');
     } finally {
         Carbon::setTestNow();
+        date_default_timezone_set($timezone);
     }
     echo "PASS: shared scheduler mutex permits one delivery and the next weekly report; disabled reports stay off.\n";
 } catch (Throwable $e) {
