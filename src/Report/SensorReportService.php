@@ -420,7 +420,9 @@ final class SensorReportService
     private function loadRows(?User $user, string $class, ?string $type, ?string $os, ?int $group, ?string $q, ?string $sensorName, Thresholds $thresholds): array
     {
         $fahrenheit = $this->usesFahrenheit($user);
-        $query = $this->baseQuery($user, $class, $type, $os, $group, $q, $sensorName)->limit(self::MAX_ROWS + 1);
+        $query = $this->baseQuery($user, $class, $type, $os, $group, $q, $sensorName)
+            ->tap(fn ($query) => $this->withoutNonRuntimes($query))
+            ->limit(self::MAX_ROWS + 1);
 
         if ($class === 'state') {
             $sensors = $query
@@ -488,7 +490,6 @@ final class SensorReportService
             ->join('devices', 'devices.device_id', '=', 'sensors.device_id')
             ->leftJoin('locations', 'locations.id', '=', 'devices.location_id')
             ->whereIn('sensors.sensor_class', (array) $class)
-            ->tap(fn ($query) => $this->withoutNonRuntimes($query))
             ->where('sensors.sensor_deleted', 0)
             ->where('devices.disabled', 0)
             ->when($type, fn ($query) => $query->where('devices.type', $type))
