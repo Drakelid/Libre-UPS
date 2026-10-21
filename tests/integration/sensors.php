@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\Device;
 use Drakelid\UpsBattery\Report\PluginSettings;
 use Drakelid\UpsBattery\Report\ReportFilters;
 use Drakelid\UpsBattery\Report\SensorReportService;
@@ -80,6 +81,11 @@ integrationCheck('A9 UPS overview includes battery-date-only devices', function 
 integrationCheck('A9 runtime reports still exclude battery dates', function () use ($service, $settings): void {
     $result = $service->report(null, ReportFilters::fromArray(['class' => 'runtime', 'q' => 'date-only-ups'], []), $settings->thresholds);
     integrationExpect($result['total'] === 0, 'Battery dates leaked into remaining runtime.');
+});
+
+integrationCheck('A5 device card uses the valid replacement sensor timestamp', function () use ($service, $settings): void {
+    $swap = $service->deviceSwap(Device::findOrFail(1), $settings);
+    integrationExpect($swap->installed === '2025-10-08' && $swap->due === '2029-10-08', 'The null due-date sensor shifted the replacement date: '.json_encode($swap->toArray()));
 });
 
 integrationFinish();

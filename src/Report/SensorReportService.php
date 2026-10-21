@@ -338,7 +338,7 @@ final class SensorReportService
             is_string($installed) ? $installed : null,
             $this->floatOrNull($due?->sensor_current),
             $this->floatOrNull($replaced?->sensor_current),
-            $this->iso(($due ?? $replaced)?->lastupdate),
+            $this->iso(($this->floatOrNull($due?->sensor_current) !== null ? $due : $replaced)?->lastupdate),
             $settings->batteryLifetimeMonths,
             $settings->swapWarnDays,
             Carbon::now()->toImmutable(),
