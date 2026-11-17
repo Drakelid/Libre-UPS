@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-11-17
+
+### Fixed
+
+- Installer route verification inspects the application's router directly instead of treating empty `route:list` output as proof of missing routes. Inspection errors retain their diagnostic output and fail verification.
+
 ## [1.4.4] - 2026-11-17
 
 ### Fixed

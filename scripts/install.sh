@@ -451,11 +451,30 @@ fi
 case "$active" in
     1)
         ok "plugin '$PLUGIN_NAME' is enabled"
-        if "${ARTISAN[@]}" route:list --json --path="plugin/$PLUGIN_NAME" 2>/dev/null | grep -Fq "$PLUGIN_NAME.report"; then
-            ok "routes registered (plugin/$PLUGIN_NAME/report, data, matrix, options, views)"
+        if routes_out="$("${ARTISAN[@]}" tinker --execute='
+$found = false;
+foreach (app("router")->getRoutes()->getRoutes() as $route) {
+    if ($route->getName() === "ups-battery.report" && $route->uri() === "plugin/ups-battery/report" && in_array("GET", $route->methods(), true)) {
+        $found = true;
+        break;
+    }
+}
+echo "UB_ROUTES=".(int) $found.PHP_EOL;
+' 2>&1)"; then
+            if printf '%s\n' "$routes_out" | grep -Fxq 'UB_ROUTES=1'; then
+                ok "report route registered (plugin/$PLUGIN_NAME/report)"
+            elif printf '%s\n' "$routes_out" | grep -Fxq 'UB_ROUTES=0'; then
+                bad "enabled, but the report route is not registered. Try: php artisan package:discover, then php artisan route:clear"
+                failures=$((failures + 1))
+            else
+                bad "could not read the registered report route:"
+                failures=$((failures + 1))
+                printf '%s\n' "$routes_out" | tail -n 5 | sed 's/^/         /'
+            fi
         else
-            bad "enabled, but the routes are not registered. Try: php artisan route:clear (and reload php-fpm)"
+            bad "could not inspect the registered report route:"
             failures=$((failures + 1))
+            printf '%s\n' "$routes_out" | tail -n 5 | sed 's/^/         /'
         fi ;;
     0)
         warn "plugin '$PLUGIN_NAME' is installed but disabled. Enable it under Overview > Plugins > Plugin Admin or with: lnms plugin:enable $PLUGIN_NAME" ;;

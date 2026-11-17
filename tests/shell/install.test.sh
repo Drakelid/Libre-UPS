@@ -51,8 +51,23 @@ elif [[ "$1" == */lnms ]] && [ "$2" = 'plugin:add' ] && [ "${INSTALL_TEST_MISSIN
 elif [[ "$1" == */artisan ]]; then
     case "$2" in
         route:clear|view:clear) exit 0 ;;
-        route:list) printf '[{"name":"ups-battery.report"}]\n' ;;
+        route:list)
+            if [ "${INSTALL_TEST_ROUTES:-present}" = filtered ]; then
+                printf '[]\n'
+            else
+                printf '[{"name":"ups-battery.report"}]\n'
+            fi ;;
         tinker)
+            if [[ "$3" == *UB_ROUTES=* ]]; then
+                case "${INSTALL_TEST_ROUTES:-present}" in
+                    missing) printf 'UB_ROUTES=0\n' ;;
+                    failed) printf 'Route inspection failed\n' >&2; exit 1 ;;
+                    failed-after-marker) printf 'UB_ROUTES=1\n'; exit 1 ;;
+                    malformed) printf 'Unexpected application output\n' ;;
+                    *) printf 'UB_ROUTES=1\n' ;;
+                esac
+                exit 0
+            fi
             case "$INSTALL_TEST_STATE" in
                 failed) printf 'Database connection failed\n' >&2; exit 1 ;;
                 malformed) printf 'Unexpected application output\n' ;;
@@ -87,6 +102,14 @@ check_state() {
     fi
     printf 'PASS: installer state %s exits %s\n' "$state" "$status"
 }
+
+export INSTALL_TEST_ROUTES=filtered
+check_state 1 0
+for route_state in missing failed failed-after-marker malformed; do
+    export INSTALL_TEST_ROUTES="$route_state"
+    check_state 1 1
+done
+unset INSTALL_TEST_ROUTES
 
 check_state failed 1
 check_state malformed 1
