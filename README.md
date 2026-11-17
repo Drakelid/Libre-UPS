@@ -99,6 +99,8 @@ The script checks PHP and write access, picks the newest tagged release (or `dev
 
 Keep the script outside `/root` so the LibreNMS user can read it. `bash install.sh --help` lists everything.
 
+If the package is listed in `composer.plugins.json` but missing from Composer's installed packages, rerun the script to repair it. The repair reuses the registered version constraint and leaves the plugin's enabled/disabled state unchanged. Use `--dry-run` to preview, or `--update` / `--version` to choose a different version. Clearing route caches alone cannot restore a missing package.
+
 ### Manual installation
 
 ```bash

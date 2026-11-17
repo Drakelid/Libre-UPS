@@ -295,7 +295,11 @@ if is_registered; then
 fi
 
 if [ "$REGISTERED" -eq 1 ]; then
-    ok "already installed: ${INSTALLED_VERSION:-unknown version}"
+    if [ -n "$INSTALLED_VERSION" ]; then
+        ok "already installed: $INSTALLED_VERSION"
+    else
+        warn "registered in composer.plugins.json, but the package is not installed; repair required"
+    fi
 else
     info "not installed yet"
 fi
@@ -307,7 +311,14 @@ if [ -n "$VERSION" ]; then
     PLUGIN_ARG="$VERSION"
     VERSION_NOTE="$VERSION (requested)"
 elif [ "$REGISTERED" -eq 1 ] && [ "$UPDATE" -eq 0 ]; then
-    VERSION_NOTE="unchanged"
+    if [ -n "$INSTALLED_VERSION" ]; then
+        VERSION_NOTE="unchanged"
+    else
+        PLUGIN_ARG="$(php -r '$data = json_decode((string) file_get_contents($argv[1]), true); echo $data["require"][$argv[2]];' \
+            "$LIBRENMS_DIR/composer.plugins.json" "$PACKAGE")" || die "Cannot read the registered version constraint"
+        [ -n "$PLUGIN_ARG" ] || die "The registered version constraint is empty; specify --version to repair"
+        VERSION_NOTE="$PLUGIN_ARG (registered constraint)"
+    fi
 else
     RESOLVED_KIND=""; RESOLVED=""
     resolve_version
@@ -332,7 +343,9 @@ else
     esac
 fi
 
-if [ "$REGISTERED" -eq 1 ] && [ "$UPDATE" -eq 0 ]; then
+if [ "$REGISTERED" -eq 1 ] && [ -z "$INSTALLED_VERSION" ]; then
+    ACTION="repair"
+elif [ "$REGISTERED" -eq 1 ] && [ "$UPDATE" -eq 0 ]; then
     ACTION="skip"
 elif [ "$REGISTERED" -eq 1 ]; then
     ACTION="update"
@@ -354,6 +367,7 @@ case "$ACTION" in
             info "Action             : install and leave disabled (--no-enable)"
         fi ;;
     update)  info "Action             : update (the enabled/disabled state is kept)" ;;
+    repair)  info "Action             : repair missing package (the enabled/disabled state is kept)" ;;
     skip)    info "Action             : nothing to install (use --update to upgrade), refresh caches and verify" ;;
 esac
 [ "$DRY_RUN" -eq 1 ] && info "Dry run            : nothing will be changed"

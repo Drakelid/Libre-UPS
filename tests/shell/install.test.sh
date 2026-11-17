@@ -34,12 +34,20 @@ if [ "$1" = '-r' ]; then
     case "$2" in
         'echo PHP_VERSION;') printf '8.3.0' ;;
         *'version_compare(PHP_VERSION'*) exit 0 ;;
-        *'vendor/composer/installed.json'*) printf '1.0.0' ;;
+        *'vendor/composer/installed.json'*)
+            if [ "${INSTALL_TEST_MISSING:-0}" = 0 ] || [ -f "$INSTALL_TEST_MARKER" ]; then
+                printf '1.0.0'
+            fi ;;
         *'isset($data["require"]'*) exit 0 ;;
+        *'echo $data["require"]'*) printf '>=1.0 <2.0' ;;
         *) printf 'Unexpected PHP code\n' >&2; exit 99 ;;
     esac
 elif [[ "$1" == */lnms ]] && [ "$2" = 'list' ]; then
     printf 'plugin:add\n'
+elif [[ "$1" == */lnms ]] && [ "$2" = 'plugin:add' ] && [ "${INSTALL_TEST_MISSING:-0}" = 1 ]; then
+    [ "$#" -eq 4 ] && [ "$3" = 'drakelid/librenms-ups-battery' ] && [ "$4" = '>=1.0 <2.0' ] || exit 99
+    [ "${INSTALL_TEST_ADD_FAIL:-0}" = 0 ] || exit 1
+    touch "$INSTALL_TEST_MARKER"
 elif [[ "$1" == */artisan ]]; then
     case "$2" in
         route:clear|view:clear) exit 0 ;;
@@ -86,3 +94,19 @@ check_state failed-after-marker 1
 check_state -1 1
 check_state 1 0
 check_state 0 0
+
+export INSTALL_TEST_MISSING=1 INSTALL_TEST_MARKER="$FIXTURE/repaired"
+check_state 1 0
+[ -f "$INSTALL_TEST_MARKER" ] || { printf 'FAIL: missing package was not repaired\n' >&2; exit 1; }
+grep -Fq 'Action             : repair' "$FIXTURE/output"
+rm "$INSTALL_TEST_MARKER"
+check_state 0 0
+rm "$INSTALL_TEST_MARKER"
+PATH="$FIXTURE/bin:$PATH" INSTALL_TEST_STATE=1 \
+    bash "$ROOT/scripts/install.sh" --dir "$FIXTURE/librenms" --dry-run >"$FIXTURE/output" 2>&1
+grep -Fq 'Action             : repair' "$FIXTURE/output"
+[ ! -f "$INSTALL_TEST_MARKER" ]
+printf 'PASS: repair dry run makes no changes\n'
+export INSTALL_TEST_ADD_FAIL=1
+check_state 1 1
+grep -Fq 'plugin:add failed' "$FIXTURE/output"

@@ -4,8 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-11-17
+
 ### Fixed
 
+- The installer repairs plugins registered in `composer.plugins.json` but absent from Composer's installed packages, preserving the registered version constraint and enabled/disabled state instead of incorrectly skipping installation.
 - A1: report endpoints, exports, the menu and device cards enforce LibreNMS' sensor-view policy. Custom roles with device access alone no longer bypass sensor permissions; standard user, global-read and admin roles keep their existing access.
 - A2: ambiguous output states such as "on Inverter" allow the other power sensors to decide whether the UPS is on battery. "UPS Off" displays as output off.
 - A3: compare-metrics state cells select and sort by severity instead of comparing unrelated vendor numeric codes.
